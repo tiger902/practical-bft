@@ -1,0 +1,10 @@
+Server ID, called m
+- a number in the range (0, R] where R is the total number of servers
+
+R
+- the number of servers that make up the system
+
+F
+- the number of servers that can fail plus the number of malicious servers that can be tolerated by the system
+
+R = 3F + 1
