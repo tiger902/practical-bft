@@ -8,3 +8,22 @@ F
 - the number of servers that can fail plus the number of malicious servers that can be tolerated by the system
 
 R = 3F + 1
+
+
+
+Roadmap
+1. Have a full protocol using labrpc and no crypography
+2. Add crypography
+3. Test locally and make sure it works
+4. Add optimization -- make a new branch for this
+4. Implement network RPC
+5. Test on the network
+6. Transport layer? For the summer? I don't know!!!
+
+
+TODO:
+1. Adding and removing servers
+2. Adding the different transport layers ... this is hard and advance, so might not need
+3. Adding crypography for the message
+
+
