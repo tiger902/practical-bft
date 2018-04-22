@@ -15,9 +15,9 @@ import (
 //
 // pbft = Make(...)
 //   create a new PBFT server.
-// rf.Start(command interface{}) ()
+// pbft.Start(command interface{}) ()
 //   start agreement on a new log entry
-// rf.GetState() (term, isLeader)
+// pbft.GetState() (term, isLeader)
 //   ask a PBFT for its current term, and whether it thinks it is leader
 //
 
@@ -38,7 +38,6 @@ type PBFT struct {
 //!struct used as argument to multicast command
 type MulticastCommandArg struct {
 	View         int        //!< leader’s term
-	LeaderID     int        //!< so follower can redirect clients
 }
 
 //!struct used as reply to multicast command
@@ -46,24 +45,24 @@ type MulticastCommandReply struct {
 }
 
 //! returns whether this server believes it is the leader.
-func (rf *PBFT) GetState() (int, bool) {
+func (pbft *PBFT) GetState() (int, bool) {
 
 	return false;
 }
 
 // Write the relavant state of PBFT to persistent storage
-func (rf *PBFT) persist() {
+func (pbft *PBFT) persist() {
 	
 }
 
 //! Restore previously persisted state.
-func (rf *PBFT) readPersist(data []byte) {
+func (pbft *PBFT) readPersist(data []byte) {
 	
 }
 
 // starts a new command
 // return the 
-func (rf *PBFT) Start(command interface{}) {
+func (pbft *PBFT) Start(command interface{}) {
 
 	// if not primary, send the request to the primary
 
@@ -74,7 +73,7 @@ func (rf *PBFT) Start(command interface{}) {
 }
 
 // MulticastCommand sends a new command to all the followers
-func (rf *PBFT) MulticastCommand(command interface{}) {
+func (pbft *PBFT) MulticastCommand(command interface{}) {
 	
 }
 
@@ -82,7 +81,7 @@ func (rf *PBFT) MulticastCommand(command interface{}) {
 //
 // \param args Arguments for command multicast
 // \param reply Reply for command multicast
-func (rf *Raft) MulticastCommandRPCHandler(args MulticastCommandArg, reply *MulticastCommandReply) {
+func (pbft *PBFT) MulticastCommandRPCHandler(args MulticastCommandArg, reply *MulticastCommandReply) {
 
 	// if a request has been processed already, just reply to the client
 	
@@ -93,7 +92,7 @@ func (rf *Raft) MulticastCommandRPCHandler(args MulticastCommandArg, reply *Mult
 }
 
 // stops the server
-func (rf *PBFT) Kill() {
+func (pbft *PBFT) Kill() {
 	// Your code here, if desired.
 }
 
@@ -103,10 +102,10 @@ func (rf *PBFT) Kill() {
 //
 func Make(peers []*labrpc.ClientEnd, serverID int, persister *Persister, applyCh chan ApplyMsg) *PBFT {
 
-	rf := &PBFT{}
-	rf.peers = peers
-	rf.persister = persister
-	rf.serverID = serverID
+	pbft := &PBFT{}
+	pbft.peers = peers
+	pbft.persister = persister
+	pbft.serverID = serverID
 
 	// start a go routine to make sure that we receive heartbeats from the primary
 	// this will essentially be a time out that then intiates a view change
