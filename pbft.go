@@ -24,6 +24,14 @@ import (
 //! Define constants to be used in this class
 //! const name = something
 
+//!< Consts with the phases of the protocol
+const (
+	PRE_PREPARE		= 0
+	PREPARE	     	= 1
+	COMMIT 			= 2
+	REPLY_TO_CLIENT	= 3
+)
+
 
 //! A Go object implementing a single PBFT peer.
 type PBFT struct {
@@ -39,7 +47,7 @@ type PBFT struct {
 
 	view			int 				//!< the current view of the system
 	serverLog 		map[int]interface{}	//!< commands
-	prepreparedCounter 	map[int]map[int]interface{}	//!< commands
+	prePreparedLog 	map[int]prePrepare	//!< commands
 	serverLock      sync.Mutex //!< Lock to be when changing the sequenceNumber,
 }
 
@@ -49,6 +57,15 @@ type PrePrepareCommandArg struct {
 	SequenceNumber 	int			//!< Sequence number of the messsage
 	Digest 			int 		//!< Digest of the message, which can is an int TODO: check the type of this
 	Message 		interface{} //!< Message for the command TODO: decouple this
+}
+
+
+//!struct used as argument to multicast command
+type PrepareCommandArg struct {
+	View         	int        	//!< leader’s term
+	SequenceNumber 	int			//!< Sequence number of the messsage
+	Digest 			int 		//!< Digest of the message, which can is an int TODO: check the type of this
+	SenderIndex 	interface{} //!< Id of the server that sends the prepare message
 }
 
 //!struct used as argument to multicast command
@@ -61,11 +78,36 @@ type MulticastCommandReply struct {
 }
 
 
+//!struct used as argument to multicast command
+type PrepareCommandArg struct {
+	View         	int        	//!< leader’s term
+	SequenceNumber 	int			//!< Sequence number of the messsage
+	Digest 			int 		//!< Digest of the message, which can is an int TODO: check the type of this
+	SenderIndex 	interface{} //!< Id of the server that sends the prepare message
+}
+
+//!struct used as argument to multicast command
+type CommitArg struct {
+	View         	int        	//!< leader’s term
+	SequenceNumber 	int			//!< Sequence number of the messsage
+	Digest 			int 		//!< Digest of the message, which can is an int TODO: check the type of this
+	SenderIndex 	interface{} //!< Id of the server that sends the prepare message
+}
+
 //!struct used to store the log entry
 type logEntry struct {
-	newCommand 	interface{}		//!< data for the operation that the client needs to the operation to be done
+	Message 		interface{}		//!< data for the operation that the client needs to the operation to be done
 	prepareCount 	int
-	commit 			int 
+	commitCount 	int 
+	prepared 		bool
+	commandDigest 	interface{}		//!< data for the operation that the client needs to the operation to be done
+	view 			int
+}
+
+//!struct used to store in log after the prepepara call
+type prePrepare struct {
+	commandDigest 	interface{}		//!< data for the operation that the client needs to the operation to be done
+	view 	int
 }
 
 //! returns whether this server believes it is the leader.
@@ -91,7 +133,7 @@ func (pbft *PBFT) Start(command interface{}) {
 	// if not primary, send the request to the primary
 	leader := pbft.view % pbft.numberOfServer
 	if (pbft.serverID != leader) {
-		pbft.SendCommandToPrimary(command)
+		pbft.SendRPCs(command, PRE_PREPARE)
 	}
 
 	// if primary, multicast to all the other servers
@@ -105,15 +147,158 @@ func (pbft *PBFT) Start(command interface{}) {
 
 }
 
-// Use RPC to send command to the primary when the server receives a command but it is not a primary
-func (pbft *PBFT) SendCommandToPrimary(command interface{}) {
-	leader := pbft.view % pbft.numberOfServer
-	ok := pbft.peers[leader].Call("PBFT.ReceiveSentCommandFromServer", command)
-	return ok
+// General function send RPCs to everyone
+func (pbft *PBFT) SendRPCs(command interface{}, phase int) {
+
+	var rpcHandlerName string
+	
+	switch phase {
+
+	//Use RPC to send preprepare messages to everyone
+	case PRE_PREPARE:
+		rpcHandlerName = "PBFT.ReceivePrePrepareRPC"
+
+	//Use RPC to send prepare messages to everyone
+	case PREPARE:
+		rpcHandlerName = "PBFT.HandlePrepareRPC"
+
+	case COMMIT:
+		return ok
+
+	case REPLY_TO_CLIENT:
+		return ok
+	}
+
+	for server := 0; server < serverCount; server++ {
+		if server != pbft.serverID {
+			ok := pbft.peers[server].Call(rpcHandlerName, command)
+
+			if !ok {
+				pbft.peers[server].Call(rpcHandlerName, command)
+			}
+		}
+	}	
+
+}
+
+//!< Handle the RPC to prepare messages
+func (pbft *PBFT) HandlePrepareRPC(args PrepareCommandArg) {
+	
+	// TODO: cast this to the right data type
+
+	// do nothing if we did not receive a prepare
+	pbft.serverLock.Lock()
+	if _, ok1 := pbft.serverLog[args.sequenceNumber]; !ok1 {
+		pbft.serverLock.Unlock()
+		return
+	}
+
+	logEntryItem, _ := pbft.serverLog[args.sequenceNumber]
+	view := bft.view
+	pbft.serverLock.Unlock()
+
+	// TODO: check for the sequenceNumber ranges for the watermarks
+	
+	// do not accept of different views
+	if (logEntryItem.view != view) || (args.Digest != logEntryItem.Digest) {
+		return
+	}
+
+	
+	
+	startCommit := false
+	pbft.serverLock.Lock()
+	serverCount := len(pbft.peers)
+	prepareCount := pbft.serverLog[args.sequenceNumber].prepareCount + 1
+	pbft.serverLog[args.sequenceNumber].prepareCount = prepareCount
+	pbft.serverLock.Unlock()
+
+	// go into the commit phase for this command after 2F + 1 replies
+	f := (serverCount - 1) / 3
+	majority := 2*f + 1
+
+	if (prepareCount >= majority) {
+		
+	}
+	
+}
+
+// MulticastCommand RPC handler.
+//
+// \param args Arguments for command multicast
+// \param reply Reply for command multicast
+func (pbft *PBFT) HandlePrePrepareRPC(args PrePrepareCommandArg) {
+
+	pbft.serverLock.Lock()
+	view := pbft.view
+	serverCount := len(pbft.peers)
+	pbft.serverLock.Unlock()
+
+	f := (serverCount - 1) / 3
+	majority := 2*f + 1
+
+	// TODO: do nothing if not coming from leader 
+
+	// check the view
+	if (view != pbft.view) {
+		return
+	}
+
+	// check if view and sequence number have not been seen
+	preInPrepareLog := false
+	if logEntryItem, ok1 := pbft.serverLog[args.sequenceNumber]; ok1 {
+		
+		// if a request has been processed already, just reply to the client
+		if (logEntryItem.commitCount == majority){
+			pbft.replyToClient()
+			return
+		}
+
+		if (logEntryItem.view == args.View) {
+			preInPrepareLog = true	// already in the prePrepareLog
+
+			match := true; // TODO: change this to the right check
+ 
+			// check that the digests match
+			if (!match) {
+				return
+			}
+		}
+	}
+
+	// if not preInPrepareLog add to the log
+	if !preInPrepareLog {
+		pbft.serverLock.Lock()
+		bft.serverLog[args.sequenceNumber] = logEntry {
+												Message: args.Message
+												prepareCount: 1,
+												commitCount:  0, 
+												prepared: true,	
+												commandDigest: args.Digest,
+												view: args.View
+											}
+		pbft.serverLock.Unlock()
+	}
+
+	// broadcast prepare messages to everyone
+	prepareCommand := PrepareCommandArg { 
+							View: args.View, 
+							SequenceNumber: args.SequenceNumber,
+							Digest: args.Digest,
+							SenderIndex: bft.view
+						}
+
+	pbft.SendRPCs(prepareCommand, PREPARE)
+}
+
+// reply to the client
+// TODO: implement this
+func (pbft *PBFT) replyToClient() {
+	
 }
 
 // Handles the RPC from a other servers that send start request to the leader
-func (pbft *PBFT) ReceiveSentCommandFromServer(command interface{}) {
+func (pbft *PBFT) ReceivePrePrepareRPC(command interface{}) {
 	pbft.Start(command)
 }
 
@@ -140,62 +325,17 @@ func (pbft *PBFT) MulticastCommand(command interface{}) {
 	prePrepareCommandArg := PrePrepareCommandArg{View: view, 
 												SequenceNumber: sequenceNumber,
 												Digest: 0 /* dummy */,
-												Message: interface{} /* dummy */}
+												Message: command /* dummy */}
 	
 	for server := 0; server < serverCount; server++ {
 		if server != pbft.serverID {
-			ok := pbft.peers[server].Call("PBFT.MulticastCommandRPCHandler", prePrepareCommandArg)
+			ok := pbft.peers[server].Call("PBFT.HandlePrePrepareRPC", prePrepareCommandArg)
 
 			if !ok {
-				pbft.peers[server].Call("PBFT.MulticastCommandRPCHandler", prePrepareCommandArg)
+				pbft.peers[server].Call("PBFT.HandlePrePrepareRPC", prePrepareCommandArg)
 			}
 		}
 	}	
-}
-
-// MulticastCommand RPC handler.
-//
-// \param args Arguments for command multicast
-// \param reply Reply for command multicast
-func (pbft *PBFT) MulticastCommandRPCHandler(args MulticastCommandArg, reply *MulticastCommandReply) {
-
-	newLogEntry := logEntry{newCommand: command, prepareCount: 1, commit: 1}
-
-	pbft.serverLock.Lock()
-	view := pbft.view
-	serverCount := len(pbft.peers)
-	//pbft.serverLog[sequenceNumber] = newLogEntry	// TODO: do we need to lock
-	pbft.serverLock.Unlock()
-
-	// check the view
-	if (view != pbft.view) {
-		return
-	}
-
-	// check if view and sequence number have not been seen
-	if sequenceMap, ok1 := pbft.prepreparedCounter[view]; ok1 {
-		
-		if digest, ok2 := sequenceMap[args.SequenceNumber]; ok2 {
-			
-			match := false; // TODO: change this to the right check
- 
-			// check that the digests match
-			if (!match) {
-				return
-			}
-		}
-
-	}
-
-
-	// TODO: using crypto do nothing if not coming from leader 
-
-	// if a request has been processed already, just reply to the client
-
-	// process the command, add the result to lastClientCommand and reply to client
-	// TODO: how do we know the channel for the client? Do we need to pass in the channel? What if
-	// it is over the network?
-	return
 }
 
 // stops the server
