@@ -15,10 +15,14 @@ Roadmap
 1. Have a full protocol using labrpc and no crypography
 2. Add crypography
 3. Test locally and make sure it works
-4. Add optimization -- make a new branch for this
-4. Implement network RPC
-5. Test on the network
-6. Transport layer? For the summer? I don't know!!!
+4. Supporting the truncation of the logs
+5. Implement the buffer for the commands
+6. Implement the h and H for the protocol
+7. Test locally and make sure it works
+8. Add optimization -- make a new branch for this
+9. Implement network RPC
+10. Test on the network
+11. Transport layer? For the summer? I don't know!!!
 
 
 TODO:
@@ -26,4 +30,9 @@ TODO:
 2. Adding the different transport layers ... this is hard and advance, so might not need
 3. Adding crypography for the message
 
+
+Evaluation 
+- how does performance change with the increase in the number of servers
+- how does performance change with the increase in the number of clients
+- what is the latency for the read and write when we change certain parameters
 

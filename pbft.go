@@ -8,6 +8,8 @@ import (
 	"math/rand"
 	"sync"
 	"time"
+	"crypto/sha256"
+	"crypto/rsa"
 )
 
 //
@@ -36,12 +38,15 @@ const (
 
 //! A Go object implementing a single PBFT peer.
 type PBFT struct {
+	privateKey  PrivateKey 			//!< Private key for this server
+	publicKeys     []PublicKey 		//!< Array of publick keys for all servers
 	peers     []*labrpc.ClientEnd 	//!< Array of all the other server sockets for RPC
 	numberOfServer int 	
 	persister *Persister          	//!< Persister to be used to store data for this server in permanent storage
 	serverID        int           	//!< Index into peers[] for this server
 	sequenceNumber  int				//!< last sequence number 
 	commandsChannel chan int		//!< channel for commands
+	lastsentReply time.Time
 
 	// add log of operations that have not been received responses
 
@@ -50,6 +55,7 @@ type PBFT struct {
 										//!< of the stage
 	prePreparedLog 	map[int]prePrepare	//!< to 
 	serverLock      sync.Mutex //!< Lock to be when changing the sequenceNumber,
+	clientRegisters map[int]time.Time	// to keep track of the last reply that has been sent to this client
 }
 
 //!struct used as argument to multicast command
@@ -130,7 +136,7 @@ func (pbft *PBFT) readPersist(data []byte) {
 
 // starts a new command
 // return the 
-func (pbft *PBFT) Start(command interface{}) {
+func (pbft *PBFT) Start(clientCommand Command) {
 
 	// if not primary, send the request to the primary
 	pbft.serverLock.Lock()
@@ -141,21 +147,29 @@ func (pbft *PBFT) Start(command interface{}) {
 		pbft.SendRPCs(command, FORWARD_COMMAND)
 		return
 	}
+
+	// do nothing if the time is before what we have sent already
+	if lastReplyTimestamp, ok := bft.clientRegisters[clientCommand.ClientID]; ok {
+		if  clientCommand.Timestamp.Before(lastReplyTimestamp) {
+			pbft.serverLock.Unlock()
+			return
+		}
+	}
+	
 	
 	prePrepareCommandArgs := PrePrepareCommandArg {
 								View  : bft.view,
 								SequenceNumber : bft.sequenceNumber++,
 								Digest : interface{},
-								Message : command
+								Message : clientCommand
 							}
 	pbft.serverLock.Unlock()
 
+	// multicast to all the other servers
+	go pbft.SendRPCs(prePrepareCommandArgs, PRE_PREPARE)
+
 	// process the recived command accordingly
 	pbft.processPrePrepare(prePrepareCommandArgs)
-
-	// multicast to all the other servers
-	pbft.SendRPCs(prePrepareCommandArgs, PRE_PREPARE)
-
 }
 
 // General function send RPCs to everyone
@@ -407,6 +421,7 @@ func (pbft *PBFT) HandleCommitRPC(arg interface{}) {
 func (pbft *PBFT) replyToClient(clientCommandReply CommandReply) {
 	
 	// TODO: update the timestamp of the last sent reply
+	// using the clientRegisters log
 }
 
 
@@ -460,7 +475,8 @@ func (pbft *PBFT) Kill() {
 // Make() must return quickly, so it should start goroutines
 // for any long-running work.
 //
-func Make(peers []*labrpc.ClientEnd, serverID int, persister *Persister, applyCh chan ApplyMsg) *PBFT {
+func Make(privateKey PrivateKey, publicKeys []PublicKey, peers []*labrpc.ClientEnd, serverID int,
+		  persister *Persister, applyCh chan ApplyMsg) *PBFT {
 
 	pbft := &PBFT{}
 	pbft.peers = peers
