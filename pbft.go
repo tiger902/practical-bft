@@ -26,10 +26,11 @@ import (
 
 //!< Consts with the phases of the protocol
 const (
-	PRE_PREPARE		= 0
-	PREPARE	     	= 1
-	COMMIT 			= 2
-	REPLY_TO_CLIENT	= 3
+	FORWARD_COMMAND = 0
+	PRE_PREPARE		= 1
+	PREPARE	     	= 2
+	COMMIT 			= 3
+	REPLY_TO_CLIENT	= 4
 )
 
 
@@ -44,10 +45,10 @@ type PBFT struct {
 
 	// add log of operations that have not been received responses
 
-
 	view			int 				//!< the current view of the system
-	serverLog 		map[int]interface{}	//!< commands
-	prePreparedLog 	map[int]prePrepare	//!< commands
+	serverLog 		map[int]logEntry	//!< to keep track of all the commands that have been seen regard less
+										//!< of the stage
+	prePreparedLog 	map[int]prePrepare	//!< to 
 	serverLock      sync.Mutex //!< Lock to be when changing the sequenceNumber,
 }
 
@@ -64,8 +65,8 @@ type PrePrepareCommandArg struct {
 type PrepareCommandArg struct {
 	View         	int        	//!< leader’s term
 	SequenceNumber 	int			//!< Sequence number of the messsage
-	Digest 			int 		//!< Digest of the message, which can is an int TODO: check the type of this
-	SenderIndex 	interface{} //!< Id of the server that sends the prepare message
+	Digest 			int //!< Digest of the message, which can is an int TODO: check the type of this
+	SenderIndex 	int 		//!< Id of the server that sends the prepare message
 }
 
 //!struct used as argument to multicast command
@@ -83,7 +84,7 @@ type PrepareCommandArg struct {
 	View         	int        	//!< leader’s term
 	SequenceNumber 	int			//!< Sequence number of the messsage
 	Digest 			int 		//!< Digest of the message, which can is an int TODO: check the type of this
-	SenderIndex 	interface{} //!< Id of the server that sends the prepare message
+	SenderIndex 	int //!< Id of the server that sends the prepare message
 }
 
 //!struct used as argument to multicast command
@@ -91,17 +92,18 @@ type CommitArg struct {
 	View         	int        	//!< leader’s term
 	SequenceNumber 	int			//!< Sequence number of the messsage
 	Digest 			int 		//!< Digest of the message, which can is an int TODO: check the type of this
-	SenderIndex 	interface{} //!< Id of the server that sends the prepare message
+	SenderIndex 	int 		//!< Id of the server that sends the prepare message
 }
 
 //!struct used to store the log entry
 type logEntry struct {
-	Message 		interface{}		//!< data for the operation that the client needs to the operation to be done
+	message 		interface{}		//!< data for the operation that the client needs to the operation to be done
 	prepareCount 	int
 	commitCount 	int 
 	prepared 		bool
 	commandDigest 	interface{}		//!< data for the operation that the client needs to the operation to be done
 	view 			int
+	clientReplySent		int
 }
 
 //!struct used to store in log after the prepepara call
@@ -131,19 +133,28 @@ func (pbft *PBFT) readPersist(data []byte) {
 func (pbft *PBFT) Start(command interface{}) {
 
 	// if not primary, send the request to the primary
+	pbft.serverLock.Lock()
 	leader := pbft.view % pbft.numberOfServer
+
 	if (pbft.serverID != leader) {
-		pbft.SendRPCs(command, PRE_PREPARE)
+		pbft.serverLock.Unlock()
+		pbft.SendRPCs(command, FORWARD_COMMAND)
+		return
 	}
-
-	// if primary, multicast to all the other servers
-	pbft.MulticastCommand(command)
 	
-	// add to the log
-	
-	// send to everyone else 
+	prePrepareCommandArgs := PrePrepareCommandArg {
+								View  : bft.view,
+								SequenceNumber : bft.sequenceNumber++,
+								Digest : interface{},
+								Message : command
+							}
+	pbft.serverLock.Unlock()
 
-	// if a request has been processed already, just reply to the client
+	// process the recived command accordingly
+	pbft.processPrePrepare(prePrepareCommandArgs)
+
+	// multicast to all the other servers
+	pbft.SendRPCs(prePrepareCommandArgs, PRE_PREPARE)
 
 }
 
@@ -152,18 +163,32 @@ func (pbft *PBFT) SendRPCs(command interface{}, phase int) {
 
 	var rpcHandlerName string
 	
+	pbft.serverLock.Lock()
+	leader := pbft.view % pbft.numberOfServer
+	serverCount := pbft.numberOfServer
+	pbft.serverLock.Unlock()
+	
 	switch phase {
+
+	//Use RPC to the leader if command was sent to a non-leader
+	case FORWARD_COMMAND:
+		rpcHandlerName = "PBFT.ReceiveForwardedCommand"
+		ok := pbft.peers[leader].Call(rpcHandlerName, command)
+		if !ok {
+			ok = pbft.peers[leader].Call(rpcHandlerName, command)
+		}
+		return ok
 
 	//Use RPC to send preprepare messages to everyone
 	case PRE_PREPARE:
-		rpcHandlerName = "PBFT.ReceivePrePrepareRPC"
+		rpcHandlerName = "PBFT.HandlePrePrepareRPC"
 
 	//Use RPC to send prepare messages to everyone
 	case PREPARE:
 		rpcHandlerName = "PBFT.HandlePrepareRPC"
 
 	case COMMIT:
-		return ok
+		rpcHandlerName = "PBFT.HandleCommitRPC"
 
 	case REPLY_TO_CLIENT:
 		return ok
@@ -181,70 +206,37 @@ func (pbft *PBFT) SendRPCs(command interface{}, phase int) {
 
 }
 
-//!< Handle the RPC to prepare messages
-func (pbft *PBFT) HandlePrepareRPC(args PrepareCommandArg) {
-	
-	// TODO: cast this to the right data type
-
-	// do nothing if we did not receive a prepare
-	pbft.serverLock.Lock()
-	if _, ok1 := pbft.serverLog[args.sequenceNumber]; !ok1 {
-		pbft.serverLock.Unlock()
-		return
-	}
-
-	logEntryItem, _ := pbft.serverLog[args.sequenceNumber]
-	view := bft.view
-	pbft.serverLock.Unlock()
-
-	// TODO: check for the sequenceNumber ranges for the watermarks
-	
-	// do not accept of different views
-	if (logEntryItem.view != view) || (args.Digest != logEntryItem.Digest) {
-		return
-	}
-
-	
-	
-	startCommit := false
-	pbft.serverLock.Lock()
-	serverCount := len(pbft.peers)
-	prepareCount := pbft.serverLog[args.sequenceNumber].prepareCount + 1
-	pbft.serverLog[args.sequenceNumber].prepareCount = prepareCount
-	pbft.serverLock.Unlock()
-
-	// go into the commit phase for this command after 2F + 1 replies
-	f := (serverCount - 1) / 3
-	majority := 2*f + 1
-
-	if (prepareCount >= majority) {
-		
-	}
-	
+//  HandlePrePrepareRPC receives and processes preprepare commands
+//
+// \param args 
+func (pbft *PBFT) HandlePrePrepareRPC(args interface{}) {
+	pbft.processPrePrepare(PrePrepareCommandArg(args))
 }
 
-// MulticastCommand RPC handler.
+//  processPrePrepare helper method to process and preprepare command 
 //
-// \param args Arguments for command multicast
-// \param reply Reply for command multicast
-func (pbft *PBFT) HandlePrePrepareRPC(args PrePrepareCommandArg) {
+// \param args 
+func (pbft *PBFT) processPrePrepare(arg PrePrepareCommandArg) {
 
 	pbft.serverLock.Lock()
 	view := pbft.view
 	serverCount := len(pbft.peers)
+	isLeader := ((view % serverCount) == pbft.serverID) ? true : false
 	pbft.serverLock.Unlock()
 
 	f := (serverCount - 1) / 3
 	majority := 2*f + 1
 
-	// TODO: do nothing if not coming from leader 
+	// TODO: do nothing if not coming from leader, this is going to be done using crypo
 
 	// check the view
-	if (view != pbft.view) {
+	if (view != args.View) {
 		return
 	}
 
-	// check if view and sequence number have not been seen
+	// check if view and sequence number have not been seen. Reply to the client if the entry has been
+	// processed already. If it has not been processed and the entry at the same sequence number and view
+	// does not match the given entry, drop the packet
 	preInPrepareLog := false
 	if logEntryItem, ok1 := pbft.serverLog[args.sequenceNumber]; ok1 {
 		
@@ -257,9 +249,9 @@ func (pbft *PBFT) HandlePrePrepareRPC(args PrePrepareCommandArg) {
 		if (logEntryItem.view == args.View) {
 			preInPrepareLog = true	// already in the prePrepareLog
 
-			match := true; // TODO: change this to the right check
+			match := true; // TODO: change this to the right check using crypto
  
-			// check that the digests match
+			// do nothing if the digest does not match the item at this entry
 			if (!match) {
 				return
 			}
@@ -275,30 +267,151 @@ func (pbft *PBFT) HandlePrePrepareRPC(args PrePrepareCommandArg) {
 												commitCount:  0, 
 												prepared: true,	
 												commandDigest: args.Digest,
-												view: args.View
+												view: args.View,
+												clientReplySent: false
 											}
 		pbft.serverLock.Unlock()
 	}
 
-	// broadcast prepare messages to everyone
-	prepareCommand := PrepareCommandArg { 
+	// broadcast prepare messages to everyone if you are not the leader
+	if !isLeader {
+		prepareCommand := PrepareCommandArg { 
 							View: args.View, 
 							SequenceNumber: args.SequenceNumber,
 							Digest: args.Digest,
-							SenderIndex: bft.view
+							SenderIndex: bft.serverID
 						}
-
-	pbft.SendRPCs(prepareCommand, PREPARE)
+		pbft.SendRPCs(prepareCommand, PREPARE)
+	}
 }
+
+//!< Handle the RPC to prepare messages
+func (pbft *PBFT) HandlePrepareRPC(args interface{}) {
+	
+	args := PrepareCommandArg(arg)
+	
+	pbft.serverLock.Lock()
+	defer pbft.serverLock.Unlock()
+	
+	logEntryItem, ok := pbft.serverLog[args.sequenceNumber]
+
+	// A replica (including the primary) accepts prepare messages and adds them to its log
+	// provided their signatures are correct, their view number equals the replica’s current view,
+	// and their sequence number is between h and H.
+	
+	// do nothing if we did not receive a preprepare
+	if !ok1 {
+		return
+	}
+
+	// do not accept of different views, or different signatures
+	if (arg.View != bft.view) || (args.Digest != logEntryItem.Digest) {
+		return
+	}
+
+	// TODO: check for the sequenceNumber ranges for the watermarks
+
+
+	pbft.serverLog[args.sequenceNumber].prepareCount++
+
+	// return if already prepared
+	if logEntryItem.prepared {
+		return
+	}
+
+	// We define the predicate prepared to be true iff replica has inserted in its 
+	// log: the request, a pre-prepare for in view with sequence number, and 2f
+	// prepares from different backups that match the pre-prepare. The replicas verify 
+	// whether the prepares match the pre-prepare by checking that they have the
+	// same view, sequence number, and digest
+
+	// go into the commit phase for this command after 2F + 1 replies
+	f := (pbft.serverCount - 1) / 3
+	majority := 2*f + 1
+
+	if (logEntryItem.prepareCount >= majority) {
+		logEntryItem.prepared = true
+		pbft.serverLog[args.sequenceNumber].commitCount++
+ 	   commitArgs := CommitArg{
+						View: bft.view,
+						SequenceNumber: args.sequenceNumber,
+						Digest: args.Digest,
+						SenderIndex; bft.serverID 
+					}
+		go bft.SendRPCs(commitArgs, COMMIT)
+	}
+}
+
+// Handles the commit RPC 
+func (pbft *PBFT) HandleCommitRPC(arg interface{}) {
+
+	args := CommitArg(arg)
+	
+	pbft.serverLock.Lock()
+	defer pbft.serverLock.Unlock()
+
+
+	// Replicas accept commit messages and insert them in their log provided 
+	// they are properly signed, the view number in the message is equal to the replica’s 
+	// current view, and the sequence number is between h and H
+
+	// TODO: implement the h and H stuff
+
+	if args.View != bft.view {
+		return
+	}
+
+	logEntryItem, ok := pbft.serverLog[args.sequenceNumber]
+	
+	// do nothing if we did not receive a preprepare
+	if !ok1 {
+		return
+	}
+
+	// do nothing if this entry has not been prepared
+	// TODO: is this the behavior we want? 
+	if !logEntryItem.prepared {
+		return
+	}
+
+	// check the signatures of the commit messages
+	// TODO: add the signatures checks
+
+	// do nothing if the reply has been sent already
+	if logEntryItem.clientReplySent {
+		return
+	}
+	
+	// go into the commit phase for this command after 2F + 1 replies
+	f := (pbft.serverCount - 1) / 3
+	majority := 2*f + 1
+
+	if (logEntryItem.commitCount >= majority) {
+		logEntryItem.clientReplySent = true
+		clientCommand := Command(logEntryItem.Message)
+ 	   	clientCommandReply := CommandReply {
+							CurrentView : bft.view,
+							RequestTimestamp: clientCommand.Timestamp, 
+							ClientID: clientCommand.ClientID,
+							ServerID: bft.serverID,
+							ResultData: interface{}
+						}
+		go bft.replyToClient(clientCommandReply)
+	}
+
+}
+
 
 // reply to the client
 // TODO: implement this
-func (pbft *PBFT) replyToClient() {
+func (pbft *PBFT) replyToClient(clientCommandReply CommandReply) {
 	
+	// TODO: update the timestamp of the last sent reply
 }
 
+
 // Handles the RPC from a other servers that send start request to the leader
-func (pbft *PBFT) ReceivePrePrepareRPC(command interface{}) {
+func (pbft *PBFT) ReceiveForwardedCommand(command interface{}) {
 	pbft.Start(command)
 }
 
