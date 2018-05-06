@@ -7,6 +7,7 @@ import (
 	"crypto/rsa"
 	"crypto/ecdsa"
 	"encoding/gob"
+	"errors"
 	"labrpc"
 	"log"
 	"hashstructure"
@@ -36,6 +37,18 @@ const (
 	PREPARE	     	= 2
 	COMMIT 			= 3
 	REPLY_TO_CLIENT	= 4
+	VIEW_CHANGE 	= 5
+)
+
+const (
+	IDLE 				= 0
+	PROCESSING_COMMAND	= 1
+	CHANGING_VIEW	    = 2
+)
+
+// protocol constants
+const (
+	CHECK_POINT_INTERVAL = 100
 )
 
 
@@ -49,15 +62,12 @@ type PBFT struct {
 	serverID        int           	//!< Index into peers[] for this server
 	sequenceNumber  int				//!< last sequence number 
 	commandsChannel chan int		//!< channel for commands
-	lastsentReply time.Time
-
-	// add log of operations that have not been received responses
-
+	uncommittedCommands int			//!< store the number of commands that we are waiting for
+	state 				int 		//!< the state of the server
+	lastCheckPointSeqNumber int 	//!< the sequence number of the last checkpoint
 	view			int 				//!< the current view of the system
-	serverLog 		map[int]logEntry	//!< to keep track of all the commands that have been seen regard less
-										//!< of the stage
-	prePreparedLog 	map[int]prePrepare	//!< to 
-	serverLock      sync.Mutex //!< Lock to be when changing the sequenceNumber,
+	serverLog 		map[int]logEntry	//!< to keep track of all the commands that have been seen regard less of the stage
+	serverLock      sync.Mutex 			//!< Lock to be when changing the sequenceNumber,
 	clientRegisters map[int]time.Time	// to keep track of the last reply that has been sent to this client
 }
 
@@ -78,13 +88,6 @@ type PrepareCommandArg struct {
 }
 
 //!struct used as argument to multicast command
-type CommandArgs struct {
-	SpecificArguments 	interface{}
-	R_firstSig			Int
-	S_secondSig 		Int
-}
-
-//!struct used as argument to multicast command
 type CommitArg struct {
 	View         	int        	//!< leader’s term
 	SequenceNumber 	int			//!< Sequence number of the messsage
@@ -92,21 +95,44 @@ type CommitArg struct {
 	SenderIndex 	int 		//!< Id of the server that sends the prepare message
 }
 
+//!struct used as argument to multicast command
+type CheckPoint struct {
+	SequenceNumber int			//!< the last sequence number that is reflected in the checkpoint
+	Digest 		   uint64		//!< digest of the state of the server that is being checkpoint-ed
+	serverID	   int			//!< ID of the server
+}
+
+//! struct for the view change arguments
+type ViewChange struct {
+	NewView int 
+	LastCheckPointSequenceNumber int 
+	LastCheckPointMessages interface{}
+	PreparedMessages interface{}
+	ServerID int 
+}
+
+//!struct used as argument to multicast command
+type CommandArgs struct {
+	SpecificArguments 	interface{}
+	R_firstSig			Int
+	S_secondSig 		Int
+}
+
 //!struct used to store the log entry
 type logEntry struct {
-	message 		interface{}		//!< data for the operation that the client needs to the operation to be done
+	message 		interface{}
 	prepareCount 	int
 	commitCount 	int 
 	prepared 		bool
-	commandDigest 	uint64		//!< data for the operation that the client needs to the operation to be done
+	commandDigest 	uint64		   
 	view 			int
-	clientReplySent		int
+	clientReplySent	int
 }
 
 //! returns whether this server believes it is the leader.
 func (pbft *PBFT) GetState() (int, bool) {
 
-	return false;
+	return false
 }
 
 // Write the relavant state of PBFT to persistent storage
@@ -206,7 +232,7 @@ func (pbft *PBFT) SendRPCs(command CommandArgs, phase int) {
 		if !ok {
 			ok = pbft.peers[leader].Call(rpcHandlerName, command)
 		}
-		return ok
+		return
 
 	//Use RPC to send preprepare messages to everyone
 	case PRE_PREPARE:
@@ -219,8 +245,11 @@ func (pbft *PBFT) SendRPCs(command CommandArgs, phase int) {
 	case COMMIT:
 		rpcHandlerName = "PBFT.HandleCommitRPC"
 
+	case VIEW_CHANGE:
+		rpcHandlerName = "PBFT.HandleViewChangeRPC"
+
 	case REPLY_TO_CLIENT:
-		return ok
+		return
 	}
 
 	for server := 0; server < serverCount; server++ {
@@ -474,6 +503,23 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs) {
 }
 
 
+// Handles the view change RPC 
+func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs) {
+
+	viewChange := ViewChange(args.SpecificArguments)
+	
+	pbft.serverLock.Lock()
+	defer pbft.serverLock.Unlock()
+}
+
+
+// helper function to make a checkpoint
+func (pbft *PBFT) makeCheckpoint(sequenceNumber int) {
+
+	// take all log entries that are less than or equal to this sequence number
+}
+
+
 // reply to the client
 // TODO: implement this
 func (pbft *PBFT) replyToClient(clientCommandReply CommandReply) {
@@ -482,6 +528,20 @@ func (pbft *PBFT) replyToClient(clientCommandReply CommandReply) {
 	// using the clientRegisters log
 }
 
+// helper function to change the view
+func (pbft *PBFT) startViewChange() {
+	pbft.serverLock.Lock()
+
+	viewChange := ViewChange {
+			NewView: bft.view + 1, 
+			LastCheckPointSequenceNumber: lastCheckPointSeqNumber,
+			LastCheckPointMessages: interface{},
+			PreparedMessages: interface{},
+			ServerID: bft.serverID 
+		}
+	pbft.serverLock.Unlock()
+	pbft.SendRPCs(pbft.makeArguments(viewChange), VIEW_CHANGE)
+}
 
 // Handles the RPC from a other servers that send start request to the leader
 func (pbft *PBFT) ReceiveForwardedCommand(command CommandArgs) {
@@ -489,8 +549,68 @@ func (pbft *PBFT) ReceiveForwardedCommand(command CommandArgs) {
 }
 
 // Processes commands in a loop as they come from commandsChannel
-func (pbft *PBFT) processsCommands() {
+func (pbft *PBFT) runningState() {
 
+	const T = 150	//TODO: this need to be changed
+	timer := &Timer{}
+
+	bft.state := IDLE
+
+	for {
+
+		select {
+		case <-timer.C:
+			if !timer.Stop() {
+				<-timer.C
+			}
+			if (bft.state == PROCESSING_COMMAND) {
+				bft.state = CHANGING_VIEW
+				bft.startViewChange()
+			}
+
+		// increment the number of commands we are waiting for and 
+		// reset the timer if we are in the IDLE state
+		case <-pbft.newValidCommad:
+			bft.uncommittedCommands++
+			if (bft.state == IDLE) {
+				bft.state = PROCESSING_COMMAND
+				if !timer.Stop() {
+					<-timer.C
+				}
+				timer.Reset(time.Millisecond * time.Duration(T))
+			}
+
+		// decrement the number of commands we are waiting for and 
+		// stop the timer if there is no more commands to run, otherwise restart
+		// the timer
+		case <-pbft.commandExecuted:
+			bft.uncommittedCommands--
+			if (bft.uncommittedCommands < 0) {
+				panic(errors.New("uncommittedCommands is 0"))
+			}
+			if (bft.state == PROCESSING_COMMAND) {
+				if !timer.Stop() {
+					<-timer.C
+				}
+				
+				if (bft.uncommittedCommands == 0) {
+					bft.state = IDLE
+				} else {
+					timer.Reset(time.Millisecond * time.Duration(T))
+				}
+			}
+
+		// TODO: this means that we will need to bft.uncommittedCommands to zero when we are
+		// done with the view change
+		case <-pbft.viewChangeComplete:
+			if (bft.uncommittedCommands == 0) {
+				bft.state = IDLE
+			} else {
+				bft.state = PROCESSING_COMMAND
+			}
+		}
+	}
+	
 }
 
 // stops the server
@@ -522,7 +642,7 @@ func Make(privateKey PrivateKey, publicKeys []PublicKey, peers []*labrpc.ClientE
 	// start a go routine for handling command
 	// TODO: change the size dynamically
 	pbft.commandsChannel = make(chan interface{}, 2*len(peers))
-	go processsCommands()
+	go runningState()
 
 	return PBFT
 }
