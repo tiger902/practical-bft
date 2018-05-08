@@ -30,6 +30,10 @@ TODO:
 2. Adding the different transport layers ... this is hard and advance, so might not need
 3. Adding crypography for the message
 
+Changes to the protocol
+- if it does not match, get state from the leader what if the leader is malicious?
+- maybe get state from the other 2f + 1 replicas and then continue with that, Implement this optimization
+
 
 Evaluation 
 - how does performance change with the increase in the number of servers

@@ -38,6 +38,7 @@ const (
 	COMMIT 			= 3
 	REPLY_TO_CLIENT	= 4
 	VIEW_CHANGE 	= 5
+	CHECK_POINT 	= 6
 )
 
 const (
@@ -69,6 +70,9 @@ type PBFT struct {
 	serverLog 		map[int]logEntry	//!< to keep track of all the commands that have been seen regard less of the stage
 	serverLock      sync.Mutex 			//!< Lock to be when changing the sequenceNumber,
 	clientRegisters map[int]time.Time	// to keep track of the last reply that has been sent to this client
+	storedState		interface{}			// this is the state that the application is keeping for this application
+	checkPoints 	map[int]CheckPointInfo
+	//lastCheckPointDigest uint64			//!< Digest of the last checkpoint
 }
 
 //!struct used for preprepare command arguments before they have been signed
@@ -96,10 +100,10 @@ type CommitArg struct {
 }
 
 //!struct used as argument to multicast command
-type CheckPoint struct {
+type CheckPointArgs struct {
 	SequenceNumber int			//!< the last sequence number that is reflected in the checkpoint
 	Digest 		   uint64		//!< digest of the state of the server that is being checkpoint-ed
-	serverID	   int			//!< ID of the server
+	SenderIndex	   int			//!< ID of the server
 }
 
 //! struct for the view change arguments
@@ -127,6 +131,13 @@ type logEntry struct {
 	commandDigest 	uint64		   
 	view 			int
 	clientReplySent	int
+}
+
+//! struct that keeps the checkpoints of the server
+type CheckPointInfo {
+	LargestSequenceNumber 	int				//!< The largest sequence number for the checkpoint
+	CheckPointState 	 	interface{}		//!< The state of the server that is part of the checkpoint
+	ConfirmedServers	  	map[int]bool 	//!< The servers that have accepted and verified the checkpoint
 }
 
 //! returns whether this server believes it is the leader.
@@ -248,6 +259,9 @@ func (pbft *PBFT) SendRPCs(command CommandArgs, phase int) {
 	case VIEW_CHANGE:
 		rpcHandlerName = "PBFT.HandleViewChangeRPC"
 
+	case CHECK_POINT:
+		rpcHandlerName = "PBFT.HandleCheckPointRPC"
+
 	case REPLY_TO_CLIENT:
 		return
 	}
@@ -265,7 +279,7 @@ func (pbft *PBFT) SendRPCs(command CommandArgs, phase int) {
 }
 
 // helper function for checking that the Digest match
-inline func verifyDigests(arg Command, digest uint64) {
+inline func verifyDigests(arg interface{}, digest uint64) {
 
 	messageDigest, errDigest := Hash(arg, nil)
 	if errDigest != nil {
@@ -512,11 +526,61 @@ func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs) {
 	defer pbft.serverLock.Unlock()
 }
 
+func (pbft *PBFT) HandleCheckPointRPC(args CommandArgs) {
+	checkPointArgs := CheckPointArgs(args.SpecificArguments)
+
+	// check that the signature of the prepare command match
+	if !bft.verifySignatures(&checkPointArgs, &args.R_firstSig, &args.S_secondSig, checkPointArgs.SenderIndex) {
+		return
+	}
+
+	// return if you do not have this checkpoint started, otherwise check the digests
+	checkPointInfo, ok := bft.CheckPointInfo[checkPointArgs.LargestSequenceNumber];
+	if !ok {
+		return 
+	}
+	if !verifyDigests(checkPointInfo, checkPointArgs.Digest) {
+		return
+	}
+
+	bft.serverLock.Lock()
+	bft.CheckPointInfo[checkPointArgs.LargestSequenceNumber].ConfirmedServers[checkPointArgs.SenderIndex] = true
+	bft.serverLock.UnLock()
+
+	// TODO: clean up the other checkpoints and the logs if this checkpoint is stable
+
+}
+
 
 // helper function to make a checkpoint
-func (pbft *PBFT) makeCheckpoint(sequenceNumber int) {
+func (pbft *PBFT) makeCheckpoint(checkPointInfo *CheckPointInfo) {
 
-	// take all log entries that are less than or equal to this sequence number
+
+	// TODO: the person who calls this must create the pointer
+	/*pbft.serverLock.Lock()
+	checkPointInfo := CheckPointInfo {
+		LargestSequenceNumber: sequenceNumber,
+		CheckPointState: bft.storedState,
+		ConfirmedServers: make(map[int]bool)
+	}
+	
+	bft.checkPoints[sequenceNumber] = checkPointInfo
+	pbft.serverLock.Unlock()*/
+
+	// hash the data that is part of the checkpoint
+	hash, err := Hash(checkPointInfo.CheckPointState, nil)
+	if err != nil {
+		panic(err)
+	}
+	
+	checkPointArgs := CheckPointArgs {
+		SequenceNumber : checkPointInfo.LargestSequenceNumber,
+		Digest : hash
+		SenderIndex : bft.serverID
+	}
+
+	pbft.SendRPCs(pbft.makeArguments(checkPointArgs), CHECK_POINT)
+
 }
 
 
