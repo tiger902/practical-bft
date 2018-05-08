@@ -4,7 +4,11 @@ package pbft
 // support for PBFT to save persistent
 //
 
-import "sync"
+import ("sync"
+		"github.com/boltdb/bolt"
+		"log"
+)
+
 
 type Persister struct {
 	mu        sync.Mutex
@@ -28,13 +32,40 @@ func (ps *Persister) Copy() *Persister {
 func (ps *Persister) SavePBFTState(data []byte) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
+
+	db, err := bolt.Open("my.db", 0600, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("storage"))
+		err := b.Put([]byte("state"), data)
+		return err
+	})
+
 	ps.pbftstate = data
 }
 
 func (ps *Persister) ReadPBFTState() []byte {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
-	return ps.pbftstate
+	state := []byte{}
+
+	db, err := bolt.Open("my.db", 0600, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("storage"))
+		state = b.Get([]byte("state"))
+		return nil
+	})
+
+	return state
 }
 
 func (ps *Persister) PBFTStateSize() int {
@@ -46,11 +77,39 @@ func (ps *Persister) PBFTStateSize() int {
 func (ps *Persister) SaveSnapshot(snapshot []byte) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
+
+	db, err := bolt.Open("my.db", 0600, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("storage"))
+		err := b.Put([]byte("snapshot"), snapshot)
+		return err
+	})
+
 	ps.snapshot = snapshot
 }
 
 func (ps *Persister) ReadSnapshot() []byte {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
-	return ps.snapshot
+
+	snapshot := []byte{}
+
+	db, err := bolt.Open("my.db", 0600, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("storage"))
+		snapshot = b.Get([]byte("snapshot"))
+		return nil
+	})
+
+	return snapshot
 }

@@ -8,8 +8,9 @@ import (
 	"encoding/binary"
 	"fmt"
 	"hash"
-	"hash/fnv"
 	"reflect"
+	"crypto/sha256"
+	"bytes"
 )
 
 // ErrNotStringer is returned when there's an error with hash:"string"
@@ -26,7 +27,7 @@ func (ens *ErrNotStringer) Error() string {
 type HashOptions struct {
 	// Hasher is the hash function to use. If this isn't set, it will
 	// default to FNV.
-	Hasher hash.Hash64
+	Hasher hash.Hash
 
 	// TagName is the struct tag to look at when hashing the structure.
 	// By default this is "hash".
@@ -75,7 +76,7 @@ func Hash(v interface{}, opts *HashOptions) (uint64, error) {
 		opts = &HashOptions{}
 	}
 	if opts.Hasher == nil {
-		opts.Hasher = fnv.New64()
+		opts.Hasher = sha256.New()
 	}
 	if opts.TagName == "" {
 		opts.TagName = "hash"
@@ -94,7 +95,7 @@ func Hash(v interface{}, opts *HashOptions) (uint64, error) {
 }
 
 type walker struct {
-	h       hash.Hash64
+	h       hash.Hash
 	tag     string
 	zeronil bool
 }
@@ -160,7 +161,14 @@ func (w *walker) visit(v reflect.Value, opts *visitOpts) (uint64, error) {
 		// A direct hash calculation
 		w.h.Reset()
 		err := binary.Write(w.h, binary.LittleEndian, v.Interface())
-		return w.h.Sum64(), err
+
+		buf := []byte{}
+		w.h.Sum(buf)
+
+		reader := bytes.NewBuffer(buf)
+		sum, err := binary.ReadVarint(reader)
+		// That conversion is sketchy
+		return uint64(sum), err
 	}
 
 	switch k {
@@ -323,7 +331,13 @@ func (w *walker) visit(v reflect.Value, opts *visitOpts) (uint64, error) {
 		// Directly hash
 		w.h.Reset()
 		_, err := w.h.Write([]byte(v.String()))
-		return w.h.Sum64(), err
+		buf := []byte{}
+		w.h.Sum(buf)
+
+		reader := bytes.NewBuffer(buf)
+		sum, err := binary.ReadVarint(reader)
+		// That conversion is sketchy
+		return uint64(sum), err
 
 	default:
 		return 0, fmt.Errorf("unknown kind to hash: %s", k)
@@ -331,7 +345,7 @@ func (w *walker) visit(v reflect.Value, opts *visitOpts) (uint64, error) {
 
 }
 
-func hashUpdateOrdered(h hash.Hash64, a, b uint64) uint64 {
+func hashUpdateOrdered(h hash.Hash, a, b uint64) uint64 {
 	// For ordered updates, use a real hash function
 	h.Reset()
 
@@ -345,8 +359,13 @@ func hashUpdateOrdered(h hash.Hash64, a, b uint64) uint64 {
 	if e2 != nil {
 		panic(e2)
 	}
+	buf := []byte{}
+	h.Sum(buf)
 
-	return h.Sum64()
+	reader := bytes.NewBuffer(buf)
+	sum, _ := binary.ReadVarint(reader)
+	// That conversion is sketchy
+	return uint64(sum)
 }
 
 func hashUpdateUnordered(a, b uint64) uint64 {

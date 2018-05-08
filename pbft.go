@@ -16,6 +16,16 @@ import (
 	"time"
 )
 
+/*
+*
+* https://golang.org/pkg/net/rpc/
+* Not too difficult to implement but I'm not sure of a better solution than hard coding IP addresses.
+* We'll need to have everything implemented locally first (the hard part) then transitioning to this will be easy
+* See https://www.cs.princeton.edu/courses/archive/fall17/cos418/docs/P3-go-rpc.zip
+*/
+
+
+
 //
 // Filename pbft.go
 //
