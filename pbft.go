@@ -24,8 +24,6 @@ import (
 * See https://www.cs.princeton.edu/courses/archive/fall17/cos418/docs/P3-go-rpc.zip
 */
 
-
-
 //
 // Filename pbft.go
 //
@@ -452,6 +450,10 @@ func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs) {
 		return
 	}
 
+	// TODO: verify all the prepare messages that are in the viewChange argument to make
+	// sure that they are all the same
+	// LastCheckPointMessages and PreparedMessages needs to be verified
+
 	// make a new map if the array of the view change messages does not exist yet
 	viewChanges, ok := bft.viewChanges[viewChange.NextView] 
 	if !ok {
@@ -463,16 +465,22 @@ func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs) {
 	}
  
 
-	bft.viewChanges[viewChange.NextView][viewChange.ServerID] =  viewChange
+	bft.viewChanges[viewChange.NextView][viewChange.ServerID] =  args
 
 	// if we now have the majority of view change requests
 	if (len(bft.viewChanges[viewChange.NextView]) >= 2 * bft.failCount) {
+
+		// TODO: append its own view change as well
 
 		// get the max and min stable sequence number in bft.viewChanges[viewChange.NextView]
 		minSequenceNumber := Inf(0)
 		maxSequenceNumber := Inf(-1)
 
-		for _, viewChange := range bft.viewChanges[viewChange.NextView] {
+		allPreprepareMessage := make([]CommandArgs)
+
+		for _, commandArgs := range bft.viewChanges[viewChange.NextView] {
+			viewChange := ViewChange(commandArgs.SpecificArguments)
+
 			if viewChange.LargestSequenceNumber < minSequenceNumber {
 				minSequenceNumber = viewChange.LargestSequenceNumber
 			}
@@ -482,22 +490,38 @@ func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs) {
 			}
 		}
 
-		// loop through to make an the O to be sent to all the other replicas
-		for sequenceNumber := minSequenceNumber; sequenceNumber <= maxSequenceNumber; sequenceNumber++ {
+		for _, commandArgs := range bft.viewChanges[viewChange.NextView] {
+			viewChange := ViewChange(commandArgs.SpecificArguments)
 
+			preparedMessages := viewChange.PreparedMessages
+
+			for sequenceNumber, prepareMForViewChange := range preparedMessages {
+				if ((sequenceNumber >= minSequenceNumber) && (sequenceNumber <= maxSequenceNumber)) {
+					preprepareMessage := prepareMForViewChange.PreprepareMessage
+					preprepareWithNoClientMessage := PreprepareWithNoClientMessage(preprepareMessage.SpecificArguments)
+					preprepareWithNoClientMessage.View = viewChange.NextView
+					preprepareMessageToSend := pbft.makeArguments(preprepareWithNoClientMessage)
+					allPreprepareMessage.append(preprepareMessageToSend)
+				}
+			}
+		}
+
+		// send the new view to everyone
+		newView := NewView {
+			NextView: viewChange.NextView,
+			ViewChangeMessages: bft.viewChanges[viewChange.NextView],
+			PreprepareMessage: allPreprepareMessage
+		}
+
+		// TODO: append allPreprepareMessage to log
+		for index, element := range allPreprepareMessage {
 
 		}
 
+		// TODO: if lastcheckpoint is less that minSequenceNumber update accordingly
 
 
-		//! struct for the view change arguments
-		type NewView struct {
-			NextView int 		//!< The next view of the system
-			ViewChangeMessages map[int]CommandArgs //!< Map with all the valid view change messages from 2f + this server
-			PreprepareMessage   map[int]CommandArgs 
-		}
-
-
+		go pbft.SendRPCs(pbft.makeArguments(newView), NEW_VIEW)
 	}
 
 }
