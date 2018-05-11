@@ -159,6 +159,9 @@ func (pbft *PBFT) SendRPCs(command CommandArgs, phase int) {
 		}
 		return
 
+	case NEW_VIEW:
+		rpcHandlerName = "PBFT.HandleNewViewRPC"
+
 	case CHECK_POINT:
 		rpcHandlerName = "PBFT.HandleCheckPointRPC"
 
@@ -470,56 +473,71 @@ func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs) {
 	// if we now have the majority of view change requests
 	if (len(bft.viewChanges[viewChange.NextView]) >= 2 * bft.failCount) {
 
-		// TODO: append its own view change as well
+		bft.viewChanges[viewChange.NextView][bft.serverID] = bft.makeViewChangeArguments()
 
 		// get the max and min stable sequence number in bft.viewChanges[viewChange.NextView]
-		minSequenceNumber := Inf(0)
-		maxSequenceNumber := Inf(-1)
-
-		allPreprepareMessage := make([]CommandArgs)
+		minLatestStableCheckpoint := Inf(0) // the minimum latest stable checkpoint
+		maxHighestPrepareSequenceNumber := Inf(-1) // the highest prepare message seen
 
 		for _, commandArgs := range bft.viewChanges[viewChange.NextView] {
 			viewChange := ViewChange(commandArgs.SpecificArguments)
 
-			if viewChange.LargestSequenceNumber < minSequenceNumber {
-				minSequenceNumber = viewChange.LargestSequenceNumber
+			if viewChange.LastCheckPointSequenceNumber < minLatestStableCheckpoint {
+				minLatestStableCheckpoint = viewChange.LastCheckPointSequenceNumber
+
+				// TODO: verify that the checkpoint is valid using the LastCheckPointMessages 
 			}
 
-			if viewChange.LargestSequenceNumber > maxSequenceNumber {
-				maxSequenceNumber = viewChange.LargestSequenceNumber
-			}
-		}
-
-		for _, commandArgs := range bft.viewChanges[viewChange.NextView] {
-			viewChange := ViewChange(commandArgs.SpecificArguments)
-
-			preparedMessages := viewChange.PreparedMessages
-
-			for sequenceNumber, prepareMForViewChange := range preparedMessages {
-				if ((sequenceNumber >= minSequenceNumber) && (sequenceNumber <= maxSequenceNumber)) {
-					preprepareMessage := prepareMForViewChange.PreprepareMessage
-					preprepareWithNoClientMessage := PreprepareWithNoClientMessage(preprepareMessage.SpecificArguments)
-					preprepareWithNoClientMessage.View = viewChange.NextView
-					preprepareMessageToSend := pbft.makeArguments(preprepareWithNoClientMessage)
-					allPreprepareMessage.append(preprepareMessageToSend)
+			for sequenceNumber, _ := range viewChange.PreparedMessages {
+				if sequenceNumber > maxHighestPrepareSequenceNumber {
+					maxHighestPrepareSequenceNumber = sequenceNumber
 				}
 			}
 		}
 
+		allPreprepareMessage := make([]CommandArgs)
+
+		for sequenceNumber = minLatestStableCheckpoint; sequenceNumber <= maxHighestPrepareSequenceNumber; sequenceNumber++ {
+
+			foundCommand := false 	// to show whether the command has been seen or not
+			var preprepareMessage CommandArgs
+			for serverID, commandArgs := range bft.viewChanges[viewChange.NextView] {
+				viewChange := ViewChange(commandArgs.SpecificArguments)
+				prepareMForViewChange, ok := viewChange.PreparedMessages[sequenceNumber]
+				if ok {
+					foundCommand = true
+					preprepareMessage = prepareMForViewChange.PreprepareMessage
+					break
+				}
+			}
+
+			var preprepareWithNoClientMessage PreprepareWithNoClientMessage
+			if !foundCommand {
+				preprepareWithNoClientMessage = PreprepareWithNoClientMessage {
+												View: viewChange.NextView,
+												SequenceNumber: sequenceNumber,
+												Digest: nil
+											}
+			} else {
+				preprepareWithNoClientMessage = PreprepareWithNoClientMessage(preprepareMessage.SpecificArguments)
+				preprepareWithNoClientMessage.View = viewChange.NextView
+			}
+
+			preprepareMessageToSend := pbft.makeArguments(preprepareWithNoClientMessage)
+			allPreprepareMessage.append(preprepareMessageToSend)
+
+			// append to log
+			pbft.addLogEntry(&preprepareWithNoClientMessage)
+		} 
+
+		bft.view = viewChange.NextView
+		
 		// send the new view to everyone
 		newView := NewView {
 			NextView: viewChange.NextView,
 			ViewChangeMessages: bft.viewChanges[viewChange.NextView],
 			PreprepareMessage: allPreprepareMessage
 		}
-
-		// TODO: append allPreprepareMessage to log
-		for index, element := range allPreprepareMessage {
-
-		}
-
-		// TODO: if lastcheckpoint is less that minSequenceNumber update accordingly
-
 
 		go pbft.SendRPCs(pbft.makeArguments(newView), NEW_VIEW)
 	}
@@ -553,14 +571,20 @@ func (pbft *PBFT) HandleCheckPointRPC(args CommandArgs) {
 	if !currentCheckpointInfo.IsStable {
 		if (len(currentCheckpointInfo.ConfirmedServers) >= (2 * bft.failCount)) {
 			bft.CheckPointInfo[checkPointArgs.LargestSequenceNumber].IsStable = true
-			for _, sequenceNumber := range bft.CheckPointInfo { 
-				if sequenceNumber < checkPointArgs.LargestSequenceNumber {
-					delete bft.CheckPointInfo[sequenceNumber]
-				}
-			}
+			bft.removeStallCheckpoints(checkPointArgs.LargestSequenceNumber) 
 		}
 	}
 	bft.serverLock.UnLock()
+}
+
+// helper function to remove checkpoints that are no longer important to us
+// this function should be called by someone who owns the serverLock
+func (pbft *PBFT) removeStallCheckpoints(largestStableSequenceNumber int) {
+	for _, sequenceNumber := range bft.CheckPointInfo { 
+		if sequenceNumber < largestStableSequenceNumber {
+			delete bft.CheckPointInfo[sequenceNumber]
+		}
+	}
 }
 
 
@@ -598,6 +622,14 @@ func (pbft *PBFT) replyToClient(clientCommandReply CommandReply) {
 func (pbft *PBFT) startViewChange() {
 
 	pbft.serverLock.Lock()
+	viewChangeArgs := bft.makeViewChangeArguments()
+	pbft.serverLock.Unlock()
+	pbft.SendRPCs(viewChangeArgs, VIEW_CHANGE)
+}
+
+// Helper method for making a view change
+// should be called by someone who holds a lock
+func (pbft *PBFT) makeViewChangeArguments() {
 
 	// make the PrepareForViewChange by looping through all the entries in the
 	// log that are prepared but not yet committed
@@ -621,10 +653,10 @@ func (pbft *PBFT) startViewChange() {
 			PreparedMessages: prepareForViewChange,
 			ServerID: bft.serverID 
 		}
-	pbft.serverLock.Unlock()
-
-	pbft.SendRPCs(pbft.makeArguments(viewChange), VIEW_CHANGE)
+	return pbft.makeArguments(viewChange)
 }
+
+
 
 // Handles the RPC from a other servers that send start request to the leader
 func (pbft *PBFT) ReceiveForwardedCommand(command CommandArgs) {

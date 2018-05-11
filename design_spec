@@ -48,5 +48,9 @@ Make sure
 - change the preprepare massage to make sure that it supports the onion layer we want 
 - make sure that the commands of the arguments are all filled in for the logEntry
 - make sure that the we save the relevent stuff for the log entry
-- delete ViewChange in the log when we became a leader or when we are at a view > view + 100 something from the leader 
+- delete ViewChange in the log when we became a leader or when we are at a view > view + 100 something from the leader
+- change Digest to take an interface not an int, so that it can support no-ops
+
+
+- changed the view change Implement for updating the replicas 
 
