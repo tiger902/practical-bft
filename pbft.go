@@ -68,6 +68,7 @@ type PBFT struct {
 	privateKey  PrivateKey 			//!< Private key for this server
 	publicKeys     []PublicKey 		//!< Array of publick keys for all servers
 	peers     []*labrpc.ClientEnd 	//!< Array of all the other server sockets for RPC
+	failCount 		int
 	numberOfServers int 	
 	persister *Persister          	//!< Persister to be used to store data for this server in permanent storage
 	serverID        int           	//!< Index into peers[] for this server
@@ -85,11 +86,16 @@ type PBFT struct {
 	//lastCheckPointDigest uint64			//!< Digest of the last checkpoint
 }
 
-//!struct used for preprepare command arguments before they have been signed
-type PrePrepareCommandArg struct {
+type PreprepareWithNoClientMessage struct {
 	View         	int        	//!< leader’s term
 	SequenceNumber 	int			//!< Sequence number of the messsage
 	Digest 			uint64 		//!< Digest of the message, which can is an uint64 TODO: change type when we switch to SHA256
+}
+
+//!struct used for preprepare command arguments before they have been signed
+// TODO: change this to reflect that in places we use it
+type PrePrepareCommandArg struct {
+	PreprepareNoClientMessage PreprepareWithNoClientMessage
 	Message 		interface{} //!< Message for the command TODO: decouple this
 }
 
@@ -97,7 +103,7 @@ type PrePrepareCommandArg struct {
 type PrepareCommandArg struct {
 	View         	int        	//!< leader’s term
 	SequenceNumber 	int			//!< Sequence number of the messsage
-	Digest 			uint64 //!< Digest of the message, which can is an int TODO: check the type of this
+	Digest 			uint64 		//!< Digest of the message, which can is an int TODO: check the type of this
 	SenderIndex 	int 		//!< Id of the server that sends the prepare message
 }
 
@@ -135,7 +141,10 @@ type CommandArgs struct {
 //!struct used to store the log entry
 type logEntry struct {
 	message 		interface{}
+	preprepare 		PrePrepareCommandArg
 	prepareCount 	int
+	prepareArgs 	map[int]CommandArgs	//!< to keep track of the prepare messages
+	commitArgs 		map[int]CommandArgs //!< to keep track of the commit messages
 	commitCount 	int 
 	prepared 		bool
 	commandDigest 	uint64		   
@@ -147,7 +156,8 @@ type logEntry struct {
 type CheckPointInfo {
 	LargestSequenceNumber 	int				//!< The largest sequence number for the checkpoint
 	CheckPointState 	 	interface{}		//!< The state of the server that is part of the checkpoint
-	ConfirmedServers	  	map[int]bool 	//!< The servers that have accepted and verified the checkpoint
+	ConfirmedServers	  	map[int]CommandArgs 	//!< The servers that have accepted and verified the checkpoint
+	IsStable 				bool
 }
 
 //! returns whether this server believes it is the leader.
@@ -522,6 +532,19 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs) {
 							ServerID: bft.serverID,
 							ResultData: interface{}
 						}
+		
+		// perform the checkpointing if this is the right moment
+		if (commitArgs.sequenceNumber / CHECK_POINT_INTERVAL) == 0 {
+			checkPointInfo := CheckPointInfo {
+				LargestSequenceNumber: commitArgs.sequenceNumber,
+				CheckPointState: bft.storedState,
+				ConfirmedServers: make(map[int]bool)
+			}
+			bft.checkPoints[commitArgs.sequenceNumber] = checkPointInfo
+			bft.lastCheckPointSeqNumber = commitArgs.sequenceNumber
+			go bft.makeCheckpoint(checkPointInfo) 
+		}
+
 		go bft.replyToClient(clientCommandReply)
 	}
 }
@@ -554,28 +577,31 @@ func (pbft *PBFT) HandleCheckPointRPC(args CommandArgs) {
 	}
 
 	bft.serverLock.Lock()
-	bft.CheckPointInfo[checkPointArgs.LargestSequenceNumber].ConfirmedServers[checkPointArgs.SenderIndex] = true
+	bft.CheckPointInfo[checkPointArgs.LargestSequenceNumber].ConfirmedServers[checkPointArgs.SenderIndex] = args
+
+	// for all checkpoints, check to see if we have received a majority
+	currentCheckpointInfo := bft.CheckPointInfo[checkPointArgs.LargestSequenceNumber]
+
+	// if this checkpoint is now stable, delete all those that are before this one
+	if !currentCheckpointInfo.IsStable {
+		if (len(currentCheckpointInfo.ConfirmedServers) >= (2 * bft.failCount)) {
+			bft.CheckPointInfo[checkPointArgs.LargestSequenceNumber].IsStable = true
+			for _, sequenceNumber := range bft.CheckPointInfo { 
+				if sequenceNumber < checkPointArgs.LargestSequenceNumber {
+					delete bft.CheckPointInfo[sequenceNumber]
+				}
+			}
+		}
+	}
 	bft.serverLock.UnLock()
-
-	// TODO: clean up the other checkpoints and the logs if this checkpoint is stable
-
 }
 
 
 // helper function to make a checkpoint
-func (pbft *PBFT) makeCheckpoint(checkPointInfo *CheckPointInfo) {
+func (pbft *PBFT) makeCheckpoint(checkPointInfo CheckPointInfo) {
 
-
-	// TODO: the person who calls this must create the pointer
-	/*pbft.serverLock.Lock()
-	checkPointInfo := CheckPointInfo {
-		LargestSequenceNumber: sequenceNumber,
-		CheckPointState: bft.storedState,
-		ConfirmedServers: make(map[int]bool)
-	}
-	
-	bft.checkPoints[sequenceNumber] = checkPointInfo
-	pbft.serverLock.Unlock()*/
+	// TODO: if there are many checkpoints that are not stable before this one, make sure to ask for the most
+	// stable checkpoint from the majority first
 
 	// hash the data that is part of the checkpoint
 	hash, err := Hash(checkPointInfo.CheckPointState, nil)
@@ -585,7 +611,7 @@ func (pbft *PBFT) makeCheckpoint(checkPointInfo *CheckPointInfo) {
 	
 	checkPointArgs := CheckPointArgs {
 		SequenceNumber : checkPointInfo.LargestSequenceNumber,
-		Digest : hash
+		Digest : hash,
 		SenderIndex : bft.serverID
 	}
 
@@ -595,21 +621,20 @@ func (pbft *PBFT) makeCheckpoint(checkPointInfo *CheckPointInfo) {
 
 
 // reply to the client
-// TODO: implement this
 func (pbft *PBFT) replyToClient(clientCommandReply CommandReply) {
-	
+	// TODO: implement this
 	// TODO: update the timestamp of the last sent reply
 	// using the clientRegisters log
 }
 
 // helper function to change the view
 func (pbft *PBFT) startViewChange() {
-	pbft.serverLock.Lock()
 
+	pbft.serverLock.Lock()
 	viewChange := ViewChange {
 			NewView: bft.view + 1, 
-			LastCheckPointSequenceNumber: lastCheckPointSeqNumber,
-			LastCheckPointMessages: interface{},
+			LastCheckPointSequenceNumber: bft.lastCheckPointSeqNumber,
+			LastCheckPointMessages: bft.CheckPointInfo[bft.lastCheckPointSeqNumber].ConfirmedServers,
 			PreparedMessages: interface{},
 			ServerID: bft.serverID 
 		}
