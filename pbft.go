@@ -48,7 +48,8 @@ const (
 	COMMIT 			= 3
 	REPLY_TO_CLIENT	= 4
 	VIEW_CHANGE 	= 5
-	CHECK_POINT 	= 6
+	NEW_VIEW		= 6
+	CHECK_POINT 	= 7
 )
 
 const (
@@ -83,8 +84,17 @@ type PBFT struct {
 	clientRegisters map[int]time.Time	// to keep track of the last reply that has been sent to this client
 	storedState		interface{}			// this is the state that the application is keeping for this application
 	checkPoints 	map[int]CheckPointInfo
-	//lastCheckPointDigest uint64			//!< Digest of the last checkpoint
+	viewChanges		map[int]map[int]CommandArgs // only used when we are performing a view change. The first index is
+												// is for the new view, and the second is for the serverID
 }
+
+//!struct used as argument to multicast command
+type CommandArgs struct {
+	SpecificArguments 	interface{}
+	R_firstSig			Int
+	S_secondSig 		Int
+}
+
 
 type PreprepareWithNoClientMessage struct {
 	View         	int        	//!< leader’s term
@@ -95,7 +105,7 @@ type PreprepareWithNoClientMessage struct {
 //!struct used for preprepare command arguments before they have been signed
 // TODO: change this to reflect that in places we use it
 type PrePrepareCommandArg struct {
-	PreprepareNoClientMessage PreprepareWithNoClientMessage
+	PreprepareNoClientMessage CommandArgs
 	Message 		interface{} //!< Message for the command TODO: decouple this
 }
 
@@ -122,20 +132,27 @@ type CheckPointArgs struct {
 	SenderIndex	   int			//!< ID of the server
 }
 
+//! struct that is used to mak
+type PrepareMForViewChange struct {
+	PreprepareMessage CommandArgs			//!< valid preprepare message (without the corresponding client message)
+	PrepareMessages   map[int]CommandArgs	//!< 2f matching, valid prepare messages signed by different backups 
+											//!< with the same view, sequence number, and the digest of client message
+}
+
 //! struct for the view change arguments
 type ViewChange struct {
-	NewView int 
+	NextView int 
 	LastCheckPointSequenceNumber int 
-	LastCheckPointMessages interface{}
-	PreparedMessages interface{}
+	LastCheckPointMessages map[int]CommandArgs
+	PreparedMessages map[int]PrepareMForViewChange
 	ServerID int 
 }
 
-//!struct used as argument to multicast command
-type CommandArgs struct {
-	SpecificArguments 	interface{}
-	R_firstSig			Int
-	S_secondSig 		Int
+//! struct for the view change arguments
+type NewView struct {
+	NextView int 		//!< The next view of the system
+	ViewChangeMessages map[int]CommandArgs //!< Map with all the valid view change messages from 2f + this server
+	PreprepareMessage   map[int]CommandArgs 
 }
 
 //!struct used to store the log entry
@@ -159,6 +176,7 @@ type CheckPointInfo {
 	ConfirmedServers	  	map[int]CommandArgs 	//!< The servers that have accepted and verified the checkpoint
 	IsStable 				bool
 }
+
 
 //! returns whether this server believes it is the leader.
 func (pbft *PBFT) GetState() (int, bool) {
@@ -248,8 +266,8 @@ func (pbft *PBFT) Start(clientCommand Command) {
 func (pbft *PBFT) SendRPCs(command CommandArgs, phase int) {
 
 	var rpcHandlerName string
-	
 	pbft.serverLock.Lock()
+	newLeader := (pbft.view + 1) % pbft.numberOfServer
 	leader := pbft.view % pbft.numberOfServer
 	serverCount := pbft.numberOfServer
 	pbft.serverLock.Unlock()
@@ -278,6 +296,11 @@ func (pbft *PBFT) SendRPCs(command CommandArgs, phase int) {
 
 	case VIEW_CHANGE:
 		rpcHandlerName = "PBFT.HandleViewChangeRPC"
+		ok := pbft.peers[newLeader].Call(rpcHandlerName, command)
+		if !ok {
+			ok = pbft.peers[newLeader].Call(rpcHandlerName, command)
+		}
+		return
 
 	case CHECK_POINT:
 		rpcHandlerName = "PBFT.HandleCheckPointRPC"
@@ -488,6 +511,7 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs) {
 	// current view, and the sequence number is between h and H
 
 	// TODO: implement the h and H stuff
+	// TODO: verify signatures of this thing
 
 	if commitArgs.View != bft.view {
 		return
@@ -555,8 +579,60 @@ func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs) {
 
 	viewChange := ViewChange(args.SpecificArguments)
 	
+	// check that the signature of the prepare command match
+	if !bft.verifySignatures(&viewChange, &args.R_firstSig, &args.S_secondSig, viewChange.SenderIndex) {
+		return
+	}
+
 	pbft.serverLock.Lock()
 	defer pbft.serverLock.Unlock()
+
+	// return if this server's view is more than that of the sender
+	// of this server is not supposed to be a leader
+	if ((viewChange.NextView <= bft.view) || ((viewChange.NextView % bft.serverCount)  != bft.view)) {
+		return
+	}
+
+	// make a new map if the array of the view change messages does not exist yet
+	viewChanges, ok := bft.viewChanges[viewChange.NextView] 
+	if !ok {
+		bft.viewChanges[viewChange.NextView] = make(map[int]CommandArgs)
+	} else {
+		if _, ok1 := viewChanges[viewChange.ServerID]; ok1 {
+			return
+		}
+	}
+ 
+
+	bft.viewChanges[viewChange.NextView][viewChange.ServerID] =  viewChange
+
+	// if we now have the majority of view change requests
+	if (len(bft.viewChanges[viewChange.NextView]) >= 2 * bft.failCount) {
+
+		// get the max and min stable sequence number in bft.viewChanges[viewChange.NextView]
+		minSequenceNumber := Inf(0)
+		maxSequenceNumber := Inf(-1)
+
+		for _, viewChange := range bft.viewChanges[viewChange.NextView] {
+			if viewChange.LargestSequenceNumber < minSequenceNumber {
+				minSequenceNumber = viewChange.LargestSequenceNumber
+			}
+
+			if viewChange.LargestSequenceNumber > maxSequenceNumber {
+				maxSequenceNumber = viewChange.LargestSequenceNumber
+			}
+		} 
+
+		//! struct for the view change arguments
+		type NewView struct {
+			NextView int 		//!< The next view of the system
+			ViewChangeMessages map[int]CommandArgs //!< Map with all the valid view change messages from 2f + this server
+			PreprepareMessage   map[int]CommandArgs 
+		}
+
+
+	}
+
 }
 
 func (pbft *PBFT) HandleCheckPointRPC(args CommandArgs) {
@@ -631,14 +707,31 @@ func (pbft *PBFT) replyToClient(clientCommandReply CommandReply) {
 func (pbft *PBFT) startViewChange() {
 
 	pbft.serverLock.Lock()
+
+	// make the PrepareForViewChange by looping through all the entries in the
+	// log that are prepared but not yet committed
+	prepareForViewChange := make(map[int]PrepareMForViewChange)
+
+	for sequenceNumber, logEntry := range bft.serverLog { 
+		if (logEntry.prepared && !logEntry.committed)  {
+
+			prepareMForViewChange := PrepareMForViewChange {
+				PreprepareMessage:  logEntry.preprepare.PreprepareNoClientMessage,			
+				PrepareMessages:    logEntry.prepareArgs
+			}
+			prepareForViewChange[sequenceNumber] = prepareMForViewChange
+		}
+	}
+
 	viewChange := ViewChange {
 			NewView: bft.view + 1, 
 			LastCheckPointSequenceNumber: bft.lastCheckPointSeqNumber,
 			LastCheckPointMessages: bft.CheckPointInfo[bft.lastCheckPointSeqNumber].ConfirmedServers,
-			PreparedMessages: interface{},
+			PreparedMessages: prepareForViewChange,
 			ServerID: bft.serverID 
 		}
 	pbft.serverLock.Unlock()
+
 	pbft.SendRPCs(pbft.makeArguments(viewChange), VIEW_CHANGE)
 }
 

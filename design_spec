@@ -40,3 +40,13 @@ Evaluation
 - how does performance change with the increase in the number of clients
 - what is the latency for the read and write when we change certain parameters
 
+
+
+Make sure
+- add the state stuff for all the other RPC helpers to make sure that they are not accepting the messages when we are
+  performaning a view change
+- change the preprepare massage to make sure that it supports the onion layer we want 
+- make sure that the commands of the arguments are all filled in for the logEntry
+- make sure that the we save the relevent stuff for the log entry
+- delete ViewChange in the log when we became a leader or when we are at a view > view + 100 something from the leader 
+
