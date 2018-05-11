@@ -37,147 +37,6 @@ import (
 //   ask a PBFT for its current term, and whether it thinks it is leader
 //
 
-//! Define constants to be used in this class
-//! const name = something
-
-//!< Consts with the phases of the protocol
-const (
-	FORWARD_COMMAND = 0
-	PRE_PREPARE		= 1
-	PREPARE	     	= 2
-	COMMIT 			= 3
-	REPLY_TO_CLIENT	= 4
-	VIEW_CHANGE 	= 5
-	NEW_VIEW		= 6
-	CHECK_POINT 	= 7
-)
-
-const (
-	IDLE 				= 0
-	PROCESSING_COMMAND	= 1
-	CHANGING_VIEW	    = 2
-)
-
-// protocol constants
-const (
-	CHECK_POINT_INTERVAL = 100
-)
-
-
-//! A Go object implementing a single PBFT peer.
-type PBFT struct {
-	privateKey  PrivateKey 			//!< Private key for this server
-	publicKeys     []PublicKey 		//!< Array of publick keys for all servers
-	peers     []*labrpc.ClientEnd 	//!< Array of all the other server sockets for RPC
-	failCount 		int
-	numberOfServers int 	
-	persister *Persister          	//!< Persister to be used to store data for this server in permanent storage
-	serverID        int           	//!< Index into peers[] for this server
-	sequenceNumber  int				//!< last sequence number 
-	commandsChannel chan int		//!< channel for commands
-	uncommittedCommands int			//!< store the number of commands that we are waiting for
-	state 				int 		//!< the state of the server
-	lastCheckPointSeqNumber int 	//!< the sequence number of the last checkpoint
-	view			int 				//!< the current view of the system
-	serverLog 		map[int]logEntry	//!< to keep track of all the commands that have been seen regard less of the stage
-	serverLock      sync.Mutex 			//!< Lock to be when changing the sequenceNumber,
-	clientRegisters map[int]time.Time	// to keep track of the last reply that has been sent to this client
-	storedState		interface{}			// this is the state that the application is keeping for this application
-	checkPoints 	map[int]CheckPointInfo
-	viewChanges		map[int]map[int]CommandArgs // only used when we are performing a view change. The first index is
-												// is for the new view, and the second is for the serverID
-}
-
-//!struct used as argument to multicast command
-type CommandArgs struct {
-	SpecificArguments 	interface{}
-	R_firstSig			Int
-	S_secondSig 		Int
-}
-
-
-type PreprepareWithNoClientMessage struct {
-	View         	int        	//!< leader’s term
-	SequenceNumber 	int			//!< Sequence number of the messsage
-	Digest 			uint64 		//!< Digest of the message, which can is an uint64 TODO: change type when we switch to SHA256
-}
-
-//!struct used for preprepare command arguments before they have been signed
-// TODO: change this to reflect that in places we use it
-type PrePrepareCommandArg struct {
-	PreprepareNoClientMessage CommandArgs
-	Message 		interface{} //!< Message for the command TODO: decouple this
-}
-
-//!struct used as argument to multicast command
-type PrepareCommandArg struct {
-	View         	int        	//!< leader’s term
-	SequenceNumber 	int			//!< Sequence number of the messsage
-	Digest 			uint64 		//!< Digest of the message, which can is an int TODO: check the type of this
-	SenderIndex 	int 		//!< Id of the server that sends the prepare message
-}
-
-//!struct used as argument to multicast command
-type CommitArg struct {
-	View         	int        	//!< leader’s term
-	SequenceNumber 	int			//!< Sequence number of the messsage
-	Digest 			uint64 		//!< Digest of the message, which can is an int TODO: check the type of this
-	SenderIndex 	int 		//!< Id of the server that sends the prepare message
-}
-
-//!struct used as argument to multicast command
-type CheckPointArgs struct {
-	SequenceNumber int			//!< the last sequence number that is reflected in the checkpoint
-	Digest 		   uint64		//!< digest of the state of the server that is being checkpoint-ed
-	SenderIndex	   int			//!< ID of the server
-}
-
-//! struct that is used to mak
-type PrepareMForViewChange struct {
-	PreprepareMessage CommandArgs			//!< valid preprepare message (without the corresponding client message)
-	PrepareMessages   map[int]CommandArgs	//!< 2f matching, valid prepare messages signed by different backups 
-											//!< with the same view, sequence number, and the digest of client message
-}
-
-//! struct for the view change arguments
-type ViewChange struct {
-	NextView int 
-	LastCheckPointSequenceNumber int 
-	LastCheckPointMessages map[int]CommandArgs
-	PreparedMessages map[int]PrepareMForViewChange
-	ServerID int 
-}
-
-//! struct for the view change arguments
-type NewView struct {
-	NextView int 		//!< The next view of the system
-	ViewChangeMessages map[int]CommandArgs //!< Map with all the valid view change messages from 2f + this server
-	PreprepareMessage   map[int]CommandArgs 
-}
-
-//!struct used to store the log entry
-type logEntry struct {
-	message 		interface{}
-	preprepare 		PrePrepareCommandArg
-	prepareCount 	int
-	prepareArgs 	map[int]CommandArgs	//!< to keep track of the prepare messages
-	commitArgs 		map[int]CommandArgs //!< to keep track of the commit messages
-	commitCount 	int 
-	prepared 		bool
-	commandDigest 	uint64		   
-	view 			int
-	clientReplySent	int
-}
-
-//! struct that keeps the checkpoints of the server
-type CheckPointInfo {
-	LargestSequenceNumber 	int				//!< The largest sequence number for the checkpoint
-	CheckPointState 	 	interface{}		//!< The state of the server that is part of the checkpoint
-	ConfirmedServers	  	map[int]CommandArgs 	//!< The servers that have accepted and verified the checkpoint
-	IsStable 				bool
-}
-
-
 //! returns whether this server believes it is the leader.
 func (pbft *PBFT) GetState() (int, bool) {
 
@@ -621,7 +480,15 @@ func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs) {
 			if viewChange.LargestSequenceNumber > maxSequenceNumber {
 				maxSequenceNumber = viewChange.LargestSequenceNumber
 			}
-		} 
+		}
+
+		// loop through to make an the O to be sent to all the other replicas
+		for sequenceNumber := minSequenceNumber; sequenceNumber <= maxSequenceNumber; sequenceNumber++ {
+
+
+		}
+
+
 
 		//! struct for the view change arguments
 		type NewView struct {
