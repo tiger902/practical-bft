@@ -283,7 +283,7 @@ func (pbft *PBFT) addLogEntry(args *PrePrepareCommandArg) {
 
 	// if not preInPrepareLog add to the log
 	bft.serverLog[args.sequenceNumber] = logEntry {
-											Message: args.Message
+											Message: args.Message,
 											prepareCount: 1,
 											commitCount:  0, 
 											prepared: true,	
@@ -438,6 +438,11 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs) {
 func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs) {
 
 	viewChange := ViewChange(args.SpecificArguments)
+
+	// do nothing is this is not for this server
+	if ((viewChange.NextView % bft.serverCount) != bft.serverID) {
+		return
+	}
 	
 	// check that the signature of the prepare command match
 	if !bft.verifySignatures(&viewChange, &args.R_firstSig, &args.S_secondSig, viewChange.SenderIndex) {
@@ -467,7 +472,6 @@ func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs) {
 		}
 	}
  
-
 	bft.viewChanges[viewChange.NextView][viewChange.ServerID] =  args
 
 	// if we now have the majority of view change requests
@@ -475,63 +479,16 @@ func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs) {
 
 		bft.viewChanges[viewChange.NextView][bft.serverID] = bft.makeViewChangeArguments()
 
-		// get the max and min stable sequence number in bft.viewChanges[viewChange.NextView]
-		minLatestStableCheckpoint := Inf(0) // the minimum latest stable checkpoint
-		maxHighestPrepareSequenceNumber := Inf(-1) // the highest prepare message seen
+		allPreprepareMessage := make([]CommandArgs)
+		createPreprepareMessages(viewChange.NextView, &allPreprepareMessage)
 
-		for _, commandArgs := range bft.viewChanges[viewChange.NextView] {
-			viewChange := ViewChange(commandArgs.SpecificArguments)
-
-			if viewChange.LastCheckPointSequenceNumber < minLatestStableCheckpoint {
-				minLatestStableCheckpoint = viewChange.LastCheckPointSequenceNumber
-
-				// TODO: verify that the checkpoint is valid using the LastCheckPointMessages 
-			}
-
-			for sequenceNumber, _ := range viewChange.PreparedMessages {
-				if sequenceNumber > maxHighestPrepareSequenceNumber {
-					maxHighestPrepareSequenceNumber = sequenceNumber
-				}
-			}
+		// append to the log all the entries
+		for _, preprepareMessage := range allPreprepareMessage {
+			pbft.addLogEntry(&preprepareMessage.SpecificArguments)
 		}
 
-		allPreprepareMessage := make([]CommandArgs)
-
-		for sequenceNumber = minLatestStableCheckpoint; sequenceNumber <= maxHighestPrepareSequenceNumber; sequenceNumber++ {
-
-			foundCommand := false 	// to show whether the command has been seen or not
-			var preprepareMessage CommandArgs
-			for serverID, commandArgs := range bft.viewChanges[viewChange.NextView] {
-				viewChange := ViewChange(commandArgs.SpecificArguments)
-				prepareMForViewChange, ok := viewChange.PreparedMessages[sequenceNumber]
-				if ok {
-					foundCommand = true
-					preprepareMessage = prepareMForViewChange.PreprepareMessage
-					break
-				}
-			}
-
-			var preprepareWithNoClientMessage PreprepareWithNoClientMessage
-			if !foundCommand {
-				preprepareWithNoClientMessage = PreprepareWithNoClientMessage {
-												View: viewChange.NextView,
-												SequenceNumber: sequenceNumber,
-												Digest: nil
-											}
-			} else {
-				preprepareWithNoClientMessage = PreprepareWithNoClientMessage(preprepareMessage.SpecificArguments)
-				preprepareWithNoClientMessage.View = viewChange.NextView
-			}
-
-			preprepareMessageToSend := pbft.makeArguments(preprepareWithNoClientMessage)
-			allPreprepareMessage.append(preprepareMessageToSend)
-
-			// append to log
-			pbft.addLogEntry(&preprepareWithNoClientMessage)
-		} 
-
 		bft.view = viewChange.NextView
-		
+
 		// send the new view to everyone
 		newView := NewView {
 			NextView: viewChange.NextView,
@@ -543,6 +500,126 @@ func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs) {
 	}
 
 }
+
+//!< Function to handle the new view RPC from the leader
+func (pbft *PBFT) HandleNewViewRPC(args CommandArgs) {
+	newView := NewView(args.SpecificArguments)
+
+	bft.serverLock.Lock()
+	defer bft.serverLock.Unlock()
+
+	// do nothing if we are already at a higher view
+	if (newView.NextView < bft.view) {
+		return
+	}
+
+	// find the new leader
+	var newLeader int
+	for serverID := 0; serverID < bft.serverCount;  serverID++{
+		if ((newView.NextView % bft.serverCount) == serverID) {
+			newLeader = serverID
+			break
+		}
+	}
+
+	// check that the signature of the prepare command match
+	if !bft.verifySignatures(&newView, &args.R_firstSig, &args.S_secondSig, newLeader) {
+		return
+	}
+
+	// check the validity of view change messages
+	for serverID, viewChangeArgs := range newView.ViewChangeMessages {
+		viewChangeMessage := NewView(viewChangeArgs.SpecificArguments)
+		if viewChangeMessage.NextView != newView.NextView {
+			return
+		}
+
+		if !bft.verifySignatures(&viewChangeMessage, &viewChangeArgs.R_firstSig, &viewChangeArgs.S_secondSig, serverID) {
+			return
+		}
+	}
+
+	// check the validity of prepare messages and compare to those that we
+	// got from the new leader
+	allPreprepareMessage := make([]CommandArgs)
+	createPreprepareMessages(newView.NextView, &allPreprepareMessage)
+
+	// TODO: perform the verification but this is not needed since it's redundant
+	
+	// append to the log all the entries
+	for _, preprepareMessage := range allPreprepareMessage {
+
+		preprepareNoClientMessage := PreprepareWithNoClientMessage(preprepareMessage.SpecificArguments)
+		pbft.addLogEntry(preprepareMessage)
+
+		// broadcast prepare messages to everyone if you are not the leader
+			prepareCommand := PrepareCommandArg { 
+				View: preprepareNoClientMessage.View, 
+				SequenceNumber: preprepareNoClientMessage.SequenceNumber,
+				Digest: preprepareNoClientMessage.Digest,
+				SenderIndex: bft.serverID
+			}
+
+		go pbft.SendRPCs(pbft.makeArguments(prepareCommand), PREPARE)
+	}
+}
+
+// function calling this should have a lock
+func (pbft *PBFT) createPreprepareMessages(nextVeiw int, allPreprepareMessage *[]CommandArgs) {
+
+	// get the max and min stable sequence number in bft.viewChanges[viewChange.NextView]
+	minLatestStableCheckpoint := Inf(0) // the minimum latest stable checkpoint
+	maxHighestPrepareSequenceNumber := Inf(-1) // the highest prepare message seen
+
+	for _, commandArgs := range bft.viewChanges[nextVeiw] {
+		viewChange := ViewChange(commandArgs.SpecificArguments)
+
+		if viewChange.LastCheckPointSequenceNumber < minLatestStableCheckpoint {
+			minLatestStableCheckpoint = viewChange.LastCheckPointSequenceNumber
+
+			// TODO: verify that the checkpoint is valid using the LastCheckPointMessages 
+		}
+
+		for sequenceNumber, _ := range viewChange.PreparedMessages {
+			if sequenceNumber > maxHighestPrepareSequenceNumber {
+				maxHighestPrepareSequenceNumber = sequenceNumber
+			}
+		}
+	} 
+
+	for sequenceNumber = minLatestStableCheckpoint; sequenceNumber <= maxHighestPrepareSequenceNumber; sequenceNumber++ {
+
+		foundCommand := false 	// to show whether the command has been seen or not
+		var preprepareMessage CommandArgs
+		for serverID, commandArgs := range bft.viewChanges[nextVeiw] {
+			viewChange := ViewChange(commandArgs.SpecificArguments)
+			prepareMForViewChange, ok := viewChange.PreparedMessages[sequenceNumber]
+			if ok {
+				foundCommand = true
+				preprepareMessage = prepareMForViewChange.PreprepareMessage
+				break
+			}
+		}
+
+		var preprepareWithNoClientMessage PreprepareWithNoClientMessage
+		if !foundCommand {
+			preprepareWithNoClientMessage = PreprepareWithNoClientMessage {
+											View: nextVeiw,
+											SequenceNumber: sequenceNumber,
+											Digest: nil
+										}
+		} else {
+			preprepareWithNoClientMessage = PreprepareWithNoClientMessage(preprepareMessage.SpecificArguments)
+			preprepareWithNoClientMessage.View = nextVeiw
+		}
+
+		preprepareMessageToSend := pbft.makeArguments(preprepareWithNoClientMessage)
+		*allPreprepareMessage = append(*allPreprepareMessage, preprepareMessageToSend)
+	} 
+
+}
+
+
 
 func (pbft *PBFT) HandleCheckPointRPC(args CommandArgs) {
 	checkPointArgs := CheckPointArgs(args.SpecificArguments)
