@@ -28,7 +28,11 @@ type PBFT struct {
 	storedState		interface{}			// this is the state that the application is keeping for this application
 	checkPoints 	map[int]CheckPointInfo
 	viewChanges		map[int]map[int]CommandArgs // only used when we are performing a view change. The first index is
+												// is for the new view, and the second is for the serverI
 												// is for the new view, and the second is for the serverID
+	newValidCommad chan bool
+	commandExecuted chan bool
+	viewChangeComplete chan bool
 }
 
 //!struct used as argument to multicast command
@@ -106,11 +110,11 @@ type NewView struct {
 type logEntry struct {
 	message 		interface{}
 	preprepare 		PrePrepareCommandArg
-	prepareCount 	int
+	//prepareCount 	int
 	prepareArgs 	map[int]CommandArgs	//!< to keep track of the prepare messages
 	commitArgs 		map[int]CommandArgs //!< to keep track of the commit messages
-	commitCount 	int 
-	prepared 		bool
+	//commitCount 	int
+	//prepared 		bool
 	commandDigest 	uint64		   
 	view 			int
 	clientReplySent	bool
