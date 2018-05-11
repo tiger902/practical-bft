@@ -1,11 +1,17 @@
 
 package pbft
 
+import (
+	"sync"
+	"time"
+	"crypto"
+	"math/big"
+)
 //! A Go object implementing a single PBFT peer.
 type PBFT struct {
-	privateKey  PrivateKey 			//!< Private key for this server
-	publicKeys     []PublicKey 		//!< Array of publick keys for all servers
-	peers     []*labrpc.ClientEnd 	//!< Array of all the other server sockets for RPC
+	privateKey  crypto.PrivateKey			//!< Private key for this server
+	publicKeys     []crypto.PublicKey 		//!< Array of publick keys for all servers
+	peers     []*ClientEnd 	//!< Array of all the other server sockets for RPC
 	failCount 		int
 	numberOfServers int 	
 	persister *Persister          	//!< Persister to be used to store data for this server in permanent storage
@@ -28,8 +34,8 @@ type PBFT struct {
 //!struct used as argument to multicast command
 type CommandArgs struct {
 	SpecificArguments 	interface{}
-	R_firstSig			Int
-	S_secondSig 		Int
+	R_firstSig			big.Int
+	S_secondSig 		big.Int
 }
 
 
@@ -37,6 +43,10 @@ type PreprepareWithNoClientMessage struct {
 	View         	int        	//!< leader’s term
 	SequenceNumber 	int			//!< Sequence number of the messsage
 	Digest 			uint64 		//!< Digest of the message, which can is an uint64 TODO: change type when we switch to SHA256
+}
+
+type verifySignatureArg struct {
+	generic interface{}
 }
 
 //!struct used for preprepare command arguments before they have been signed
@@ -82,14 +92,14 @@ type ViewChange struct {
 	LastCheckPointSequenceNumber int 
 	LastCheckPointMessages map[int]CommandArgs
 	PreparedMessages map[int]PrepareMForViewChange
-	ServerID int 
+	SenderID int
 }
 
 //! struct for the view change arguments
 type NewView struct {
 	NextView int 		//!< The next view of the system
 	ViewChangeMessages map[int]CommandArgs //!< Map with all the valid view change messages from 2f + this server
-	PreprepareMessage   map[int]CommandArgs 
+	PreprepareMessage   []CommandArgs
 }
 
 //!struct used to store the log entry
@@ -103,11 +113,11 @@ type logEntry struct {
 	prepared 		bool
 	commandDigest 	uint64		   
 	view 			int
-	clientReplySent	int
+	clientReplySent	bool
 }
 
 //! struct that keeps the checkpoints of the server
-type CheckPointInfo {
+type CheckPointInfo struct {
 	LargestSequenceNumber 	int				//!< The largest sequence number for the checkpoint
 	CheckPointState 	 	interface{}		//!< The state of the server that is part of the checkpoint
 	ConfirmedServers	  	map[int]CommandArgs 	//!< The servers that have accepted and verified the checkpoint

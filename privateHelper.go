@@ -1,4 +1,11 @@
+package pbft
 
+import (
+	"time"
+	"errors"
+	"crypto/rand"
+	"math/big"
+)
 
 // Processes commands in a loop as they come from commandsChannel
 func (pbft *PBFT) runningState() {
@@ -67,7 +74,7 @@ func (pbft *PBFT) runningState() {
 
 // Helper method for making a view change
 // should be called by someone who holds a lock
-func (pbft *PBFT) makeViewChangeArguments() {
+func (pbft *PBFT) makeViewChangeArguments() CommandArgs {
 
 	// make the PrepareForViewChange by looping through all the entries in the
 	// log that are prepared but not yet committed
@@ -198,7 +205,7 @@ func (pbft *PBFT) sendRPCs(command CommandArgs, phase int) {
 }
 
 // helper function for checking that the Digest match
-inline func verifyDigests(arg interface{}, digest uint64) {
+func verifyDigests(arg interface{}, digest uint64) bool {
 
 	messageDigest, errDigest := Hash(arg, nil)
 	if errDigest != nil {
@@ -213,7 +220,7 @@ inline func verifyDigests(arg interface{}, digest uint64) {
 
 
 // helper function for checking that the Digest match
-func (pbft *PBFT) verifySignatures(args *interface{}, r_firstSig *Int, s_secondSig *Int, peerID int) {
+func (pbft *PBFT) verifySignatures(args *verifySignatureArg, r_firstSig *big.Int, s_secondSig *big.Int, peerID int) bool {
 
 	// hash the received command so that we can use the hash for verification of the signatures 
 	hash, err := Hash(args, nil)
@@ -222,7 +229,7 @@ func (pbft *PBFT) verifySignatures(args *interface{}, r_firstSig *Int, s_secondS
 	}
 
 	// check that the signature of the prepare command match
-	if !Verify(&bft.publicKey[peerID], hash, r_firstSig, s_secondSig) {
+	if !Verify(&pbft.publicKey[peerID], hash, r_firstSig, s_secondSig) {
 		return false
 	}
 	return true
@@ -346,7 +353,7 @@ func (pbft *PBFT) readPersist(data []byte) {
 	
 }
 
-func (pbft *PBFT) makeArguments(specificArgument interface{}) {
+func (pbft *PBFT) makeArguments(specificArgument interface{}) CommandArgs {
 	// make the hash to be used for making the signatures, and then sign the message
 	hash, err = Hash(specificArgument, nil)
 	if err != nil {

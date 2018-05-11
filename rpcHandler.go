@@ -1,14 +1,28 @@
 package pbft
 
+import "log"
+
 //  HandlePrePrepareRPC receives and processes preprepare commands
 //
 // \param args 
 func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs) {
 
-	preprepareCommandArgs := PrePrepareCommandArg(args.SpecificArguments)
+	preprepareCommandArgs, ok := args.SpecificArguments.(PrePrepareCommandArg)
+
+	if !ok {
+		log.Fatal("[handlePrePrepareRPC] preprepare command args failed")
+	}
+
+	prePrepareNoClientMessageArgs := preprepareCommandArgs.PreprepareNoClientMessage
+
+	prePrepareNoClientMessages, ok1 := prePrepareNoClientMessageArgs.SpecificArguments.(PreprepareWithNoClientMessage)
+	if !ok1 {
+		log.Fatal("[handlePrePrepareRPC] preprepare command args failed")
+	}
 
 	// return of the message digest does not match with the one that will be calculated here
-	if !verifyDigests(preprepareCommandArgs.Message, preprepareCommandArgs.Digest) {
+	if !verifyDigests(preprepareCommandArgs.Message, prePrepareNoClientMessages.Digest) {
+		log.Print("[handlePrePrepareRPC] preprepare command args failed")
 		return
 	}
 	
@@ -17,27 +31,39 @@ func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs) {
 	view := pbft.view
 	serverCount := len(pbft.peers)
 	leader := pbft.view % serverCount
-	isLeader := (leader == pbft.serverID) ? true : false
 	
 	// check that the signature of the prepare command match
-	if !bft.verifySignatures(&preprepareCommandArgs, &args.R_firstSig, &args.S_secondSig, leader) {
+	signatureArg := verifySignatureArg {
+		generic: preprepareCommandArgs,
+
+	}
+	if !pbft.verifySignatures(&signatureArg, &args.R_firstSig, &args.S_secondSig, leader) {
 		return
 	}
 
+	signatureArg = verifySignatureArg {
+		generic: prePrepareNoClientMessages,
+
+	}
+	if !pbft.verifySignatures(&signatureArg, &prePrepareNoClientMessageArgs.R_firstSig, &prePrepareNoClientMessageArgs.S_secondSig, leader) {
+		return
+	}
+
+
 	// check the view
-	if (view != preprepareCommandArgs.View) {
+	if (view != prePrepareNoClientMessages.View) {
 		return
 	}
 
 	// add entry to the log
-	bft.addLogEntry(&preprepareCommandArgs)
+	pbft.addLogEntry(&preprepareCommandArgs)
 
 	// broadcast prepare messages to everyone if you are not the leader
 	prepareCommand := PrepareCommandArg { 
-						View: preprepareCommandArgs.View, 
-						SequenceNumber: preprepareCommandArgs.SequenceNumber,
-						Digest: preprepareCommandArgs.Digest,
-						SenderIndex: bft.serverID
+						View: prePrepareNoClientMessages.View,
+						SequenceNumber: prePrepareNoClientMessages.SequenceNumber,
+						Digest: prePrepareNoClientMessages.Digest,
+						SenderIndex: pbft.serverID,
 					}
 
 
@@ -48,17 +74,24 @@ func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs) {
 //!< Handle the RPC to prepare messages
 func (pbft *PBFT) HandlePrepareRPC(args CommandArgs) {
 
-	prepareArgs := PrepareCommandArg(args.SpecificArguments)
-	
+	prepareArgs, ok := args.SpecificArguments.(PrepareCommandArg)
+	if !ok {
+		log.Fatal("[handlePrePrepareRPC] preprepare command args failed")
+	}
+
 	pbft.serverLock.Lock()
 	defer pbft.serverLock.Unlock()
-	
+
+	signatureArg := verifySignatureArg {
+		generic: prepareArgs,
+
+	}
 	// check that the signature of the prepare command match
-	if !bft.verifySignatures(&prepareArgs, &args.R_firstSig, &args.S_secondSig, prepareArgs.SenderIndex) {
+	if !pbft.verifySignatures(&signatureArg, &args.R_firstSig, &args.S_secondSig, prepareArgs.SenderIndex) {
 		return
 	}
 
-	logEntryItem, ok := pbft.serverLog[prepareArgs.sequenceNumber]
+	logEntryItem, ok1 := pbft.serverLog[prepareArgs.SequenceNumber]
 
 	// A replica (including the primary) accepts prepare messages and adds them to its log
 	// provided their signatures are correct, their view number equals the replica’s current view,
@@ -70,14 +103,14 @@ func (pbft *PBFT) HandlePrepareRPC(args CommandArgs) {
 	}
 
 	// do not accept of different views, or different signatures
-	if (prepareArgs.View != bft.view) || (prepareArgs.Digest != logEntryItem.Digest) {
+	if (prepareArgs.View != pbft.view) || (prepareArgs.Digest != logEntryItem.commandDigest) {
 		return
 	}
 
 	// TODO: check for the sequenceNumber ranges for the watermarks
 
 
-	pbft.serverLog[prepareArgs.sequenceNumber].prepareCount++
+	pbft.serverLog[prepareArgs.SequenceNumber].prepareCount++
 
 	// return if already prepared
 	if logEntryItem.prepared {
@@ -91,27 +124,30 @@ func (pbft *PBFT) HandlePrepareRPC(args CommandArgs) {
 	// same view, sequence number, and digest
 
 	// go into the commit phase for this command after 2F + 1 replies
-	f := (pbft.serverCount - 1) / 3
+	f := (len(pbft.peers) - 1) / 3
 	majority := 2*f + 1
 
 	if (logEntryItem.prepareCount >= majority) {
 		logEntryItem.prepared = true
-		pbft.serverLog[prepareArgs.sequenceNumber].commitCount++
+		pbft.serverLog[prepareArgs.SequenceNumber].commitCount++
  	   commitArgs := CommitArg{
-						View: bft.view,
-						SequenceNumber: prepareArgs.sequenceNumber,
+						View: pbft.view,
+						SequenceNumber: prepareArgs.SequenceNumber,
 						Digest: prepareArgs.Digest,
-						SenderIndex; bft.serverID 
+						SenderIndex: pbft.serverID,
 					}
 	
-		go bft.sendRPCs(pbft.makeArguments(commitArgs), COMMIT)
+		go pbft.sendRPCs(pbft.makeArguments(commitArgs), COMMIT)
 	}
 }
 
 // Handles the commit RPC 
 func (pbft *PBFT) HandleCommitRPC(args CommandArgs) {
 
-	commitArgs := PrepareCommandArg(args.SpecificArguments)
+	commitArgs, ok := args.SpecificArguments.(PrepareCommandArg)
+	if !ok {
+		log.Fatal("[handlePrePrepareRPC] preprepare command args failed")
+	}
 	
 	pbft.serverLock.Lock()
 	defer pbft.serverLock.Unlock()
@@ -124,14 +160,14 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs) {
 	// TODO: implement the h and H stuff
 	// TODO: verify signatures of this thing
 
-	if commitArgs.View != bft.view {
+	if commitArgs.View != pbft.view {
 		return
 	}
 
-	logEntryItem, ok := pbft.serverLog[commitArgs.sequenceNumber]
+	logEntryItem, ok := pbft.serverLog[commitArgs.SequenceNumber]
 	
 	// do nothing if we did not receive a preprepare
-	if !ok1 {
+	if !ok {
 		return
 	}
 
@@ -141,8 +177,12 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs) {
 		return
 	}
 
+	signatureArg := verifySignatureArg {
+		generic: commitArgs,
+
+	}
 	// check that the signature of the prepare command match
-	if !bft.verifySignatures(&commitArgs, &args.R_firstSig, &args.S_secondSig, commitArgs.SenderIndex) {
+	if !pbft.verifySignatures(&signatureArg, &args.R_firstSig, &args.S_secondSig, commitArgs.SenderIndex) {
 		return
 	}
 
@@ -152,35 +192,34 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs) {
 	}
 	
 	// go into the commit phase for this command after 2F + 1 replies
-	f := (pbft.serverCount - 1) / 3
+	f := (len(pbft.peers) - 1) / 3
 	majority := 2*f + 1
 
 	logEntryItem.commitCount++
 
 	if ((logEntryItem.commitCount >= majority) && !logEntryItem.clientReplySent) {
 		logEntryItem.clientReplySent = true
-		clientCommand := Command(logEntryItem.Message)
+		clientCommand := logEntryItem.message.(Command)
  	   	clientCommandReply := CommandReply {
-							CurrentView : bft.view,
+							CurrentView : pbft.view,
 							RequestTimestamp: clientCommand.Timestamp, 
 							ClientID: clientCommand.ClientID,
-							ServerID: bft.serverID,
-							ResultData: interface{}
+							ServerID: pbft.serverID,
 						}
 		
 		// perform the checkpointing if this is the right moment
-		if (commitArgs.sequenceNumber / CHECK_POINT_INTERVAL) == 0 {
+		if (commitArgs.SequenceNumber / CHECK_POINT_INTERVAL) == 0 {
 			checkPointInfo := CheckPointInfo {
-				LargestSequenceNumber: commitArgs.sequenceNumber,
-				CheckPointState: bft.storedState,
-				ConfirmedServers: make(map[int]bool)
+				LargestSequenceNumber: commitArgs.SequenceNumber,
+				CheckPointState: pbft.storedState,
+				ConfirmedServers: make(map[int]CommandArgs),
 			}
-			bft.checkPoints[commitArgs.sequenceNumber] = checkPointInfo
-			bft.lastCheckPointSeqNumber = commitArgs.sequenceNumber
-			go bft.makeCheckpoint(checkPointInfo) 
+			pbft.checkPoints[commitArgs.SequenceNumber] = checkPointInfo
+			pbft.lastCheckPointSeqNumber = commitArgs.SequenceNumber
+			go pbft.makeCheckpoint(checkPointInfo)
 		}
 
-		go bft.replyToClient(clientCommandReply)
+		go pbft.replyToClient(clientCommandReply)
 	}
 }
 
@@ -188,15 +227,22 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs) {
 // Handles the view change RPC 
 func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs) {
 
-	viewChange := ViewChange(args.SpecificArguments)
+	viewChange, ok := args.SpecificArguments.(ViewChange)
+	if !ok {
+		log.Fatal("[handlePrePrepareRPC] preprepare command args failed")
+	}
 
 	// do nothing is this is not for this server
-	if ((viewChange.NextView % bft.serverCount) != bft.serverID) {
+	if ((viewChange.NextView % len(pbft.peers)) != pbft.serverID) {
 		return
 	}
-	
+
+	signatureArg := verifySignatureArg {
+		generic: viewChange,
+
+	}
 	// check that the signature of the prepare command match
-	if !bft.verifySignatures(&viewChange, &args.R_firstSig, &args.S_secondSig, viewChange.SenderIndex) {
+	if !pbft.verifySignatures(&signatureArg, &args.R_firstSig, &args.S_secondSig, viewChange.SenderID) {
 		return
 	}
 
@@ -205,7 +251,7 @@ func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs) {
 
 	// return if this server's view is more than that of the sender
 	// of this server is not supposed to be a leader
-	if ((viewChange.NextView <= bft.view) || ((viewChange.NextView % bft.serverCount)  != bft.view)) {
+	if ((viewChange.NextView <= pbft.view) || ((viewChange.NextView % len(pbft.peers))  != pbft.view)) {
 		return
 	}
 
@@ -214,37 +260,41 @@ func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs) {
 	// LastCheckPointMessages and PreparedMessages needs to be verified
 
 	// make a new map if the array of the view change messages does not exist yet
-	viewChanges, ok := bft.viewChanges[viewChange.NextView] 
+	viewChanges, ok := pbft.viewChanges[viewChange.NextView]
 	if !ok {
-		bft.viewChanges[viewChange.NextView] = make(map[int]CommandArgs)
+		pbft.viewChanges[viewChange.NextView] = make(map[int]CommandArgs)
 	} else {
-		if _, ok1 := viewChanges[viewChange.ServerID]; ok1 {
+		if _, ok1 := viewChanges[viewChange.SenderID]; ok1 {
 			return
 		}
 	}
  
-	bft.viewChanges[viewChange.NextView][viewChange.ServerID] =  args
+	pbft.viewChanges[viewChange.NextView][viewChange.SenderID] =  args
 
 	// if we now have the majority of view change requests
-	if (len(bft.viewChanges[viewChange.NextView]) >= 2 * bft.failCount) {
+	if (len(pbft.viewChanges[viewChange.NextView]) >= 2 * pbft.failCount) {
 
-		bft.viewChanges[viewChange.NextView][bft.serverID] = bft.makeViewChangeArguments()
+		pbft.viewChanges[viewChange.NextView][pbft.serverID] = pbft.makeViewChangeArguments()
 
-		allPreprepareMessage := make([]CommandArgs)
-		createPreprepareMessages(viewChange.NextView, &allPreprepareMessage)
+		var allPreprepareMessage []CommandArgs
+		pbft.createPreprepareMessages(viewChange.NextView, &allPreprepareMessage)
 
 		// append to the log all the entries
 		for _, preprepareMessage := range allPreprepareMessage {
-			pbft.addLogEntry(&preprepareMessage.SpecificArguments)
+
+			prePrepareCommandArg := PrePrepareCommandArg {
+				PreprepareNoClientMessage: preprepareMessage,
+			}
+			pbft.addLogEntry(&prePrepareCommandArg)
 		}
 
-		bft.view = viewChange.NextView
+		pbft.view = viewChange.NextView
 
 		// send the new view to everyone
 		newView := NewView {
 			NextView: viewChange.NextView,
-			ViewChangeMessages: bft.viewChanges[viewChange.NextView],
-			PreprepareMessage: allPreprepareMessage
+			ViewChangeMessages: pbft.viewChanges[viewChange.NextView],
+			PreprepareMessage: allPreprepareMessage,
 		}
 
 		go pbft.sendRPCs(pbft.makeArguments(newView), NEW_VIEW)
@@ -254,61 +304,78 @@ func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs) {
 
 //!< Function to handle the new view RPC from the leader
 func (pbft *PBFT) HandleNewViewRPC(args CommandArgs) {
-	newView := NewView(args.SpecificArguments)
+	newView, ok := args.SpecificArguments.(NewView)
 
-	bft.serverLock.Lock()
-	defer bft.serverLock.Unlock()
+	if !ok {
+		log.Fatal("[handlePrePrepareRPC] preprepare command args failed")
+	}
+
+	pbft.serverLock.Lock()
+	defer pbft.serverLock.Unlock()
 
 	// do nothing if we are already at a higher view
-	if (newView.NextView < bft.view) {
+	if (newView.NextView < pbft.view) {
 		return
 	}
 
 	// find the new leader
 	var newLeader int
-	for serverID := 0; serverID < bft.serverCount;  serverID++{
-		if ((newView.NextView % bft.serverCount) == serverID) {
+	for serverID := 0; serverID < len(pbft.peers);  serverID++{
+		if ((newView.NextView % len(pbft.peers)) == serverID) {
 			newLeader = serverID
 			break
 		}
 	}
 
+	signatureArg := verifySignatureArg {
+		generic: newView,
+
+	}
 	// check that the signature of the prepare command match
-	if !bft.verifySignatures(&newView, &args.R_firstSig, &args.S_secondSig, newLeader) {
+	if !pbft.verifySignatures(&signatureArg, &args.R_firstSig, &args.S_secondSig, newLeader) {
 		return
 	}
 
 	// check the validity of view change messages
 	for serverID, viewChangeArgs := range newView.ViewChangeMessages {
-		viewChangeMessage := NewView(viewChangeArgs.SpecificArguments)
+		viewChangeMessage := viewChangeArgs.SpecificArguments.(NewView)
 		if viewChangeMessage.NextView != newView.NextView {
 			return
 		}
 
-		if !bft.verifySignatures(&viewChangeMessage, &viewChangeArgs.R_firstSig, &viewChangeArgs.S_secondSig, serverID) {
+		signatureArg = verifySignatureArg {
+			generic: viewChangeMessage,
+
+		}
+
+		if !pbft.verifySignatures(&signatureArg, &viewChangeArgs.R_firstSig, &viewChangeArgs.S_secondSig, serverID) {
 			return
 		}
 	}
 
 	// check the validity of prepare messages and compare to those that we
 	// got from the new leader
-	allPreprepareMessage := make([]CommandArgs)
-	createPreprepareMessages(newView.NextView, &allPreprepareMessage)
+	var allPreprepareMessage []CommandArgs
+	pbft.createPreprepareMessages(newView.NextView, &allPreprepareMessage)
 
 	// TODO: perform the verification but this is not needed since it's redundant
 	
 	// append to the log all the entries
 	for _, preprepareMessage := range allPreprepareMessage {
 
-		preprepareNoClientMessage := PreprepareWithNoClientMessage(preprepareMessage.SpecificArguments)
-		pbft.addLogEntry(preprepareMessage)
+		prePrepareCommandArg := PrePrepareCommandArg {
+			PreprepareNoClientMessage: preprepareMessage,
+		}
+		pbft.addLogEntry(&prePrepareCommandArg)
+
+		preprepareNoClientMessage := preprepareMessage.SpecificArguments.(PreprepareWithNoClientMessage)
 
 		// broadcast prepare messages to everyone if you are not the leader
 			prepareCommand := PrepareCommandArg { 
 				View: preprepareNoClientMessage.View, 
 				SequenceNumber: preprepareNoClientMessage.SequenceNumber,
 				Digest: preprepareNoClientMessage.Digest,
-				SenderIndex: bft.serverID
+				SenderIndex: pbft.serverID,
 			}
 
 		go pbft.sendRPCs(pbft.makeArguments(prepareCommand), PREPARE)
@@ -317,15 +384,22 @@ func (pbft *PBFT) HandleNewViewRPC(args CommandArgs) {
 
 
 func (pbft *PBFT) HandleCheckPointRPC(args CommandArgs) {
-	checkPointArgs := CheckPointArgs(args.SpecificArguments)
+	checkPointArgs, ok := args.SpecificArguments.(CheckPointArgs)
+	if !ok {
+		log.Fatal("[handlePrePrepareRPC] preprepare command args failed")
+	}
 
+	signatureArg := verifySignatureArg {
+		generic: checkPointArgs,
+
+	}
 	// check that the signature of the prepare command match
-	if !bft.verifySignatures(&checkPointArgs, &args.R_firstSig, &args.S_secondSig, checkPointArgs.SenderIndex) {
+	if !pbft.verifySignatures(&signatureArg, &args.R_firstSig, &args.S_secondSig, checkPointArgs.SenderIndex) {
 		return
 	}
 
 	// return if you do not have this checkpoint started, otherwise check the digests
-	checkPointInfo, ok := bft.CheckPointInfo[checkPointArgs.LargestSequenceNumber];
+	checkPointInfo, ok := pbft.checkPoints[checkPointArgs.SequenceNumber];
 	if !ok {
 		return 
 	}
@@ -333,18 +407,19 @@ func (pbft *PBFT) HandleCheckPointRPC(args CommandArgs) {
 		return
 	}
 
-	bft.serverLock.Lock()
-	bft.CheckPointInfo[checkPointArgs.LargestSequenceNumber].ConfirmedServers[checkPointArgs.SenderIndex] = args
+	pbft.serverLock.Lock()
+	pbft.checkPoints[checkPointArgs.SequenceNumber].ConfirmedServers[checkPointArgs.SenderIndex] = args
 
 	// for all checkpoints, check to see if we have received a majority
-	currentCheckpointInfo := bft.CheckPointInfo[checkPointArgs.LargestSequenceNumber]
+	currentCheckpointInfo := pbft.checkPoints[checkPointArgs.SequenceNumber]
 
 	// if this checkpoint is now stable, delete all those that are before this one
 	if !currentCheckpointInfo.IsStable {
-		if (len(currentCheckpointInfo.ConfirmedServers) >= (2 * bft.failCount)) {
-			bft.CheckPointInfo[checkPointArgs.LargestSequenceNumber].IsStable = true
-			bft.removeStallCheckpoints(checkPointArgs.LargestSequenceNumber) 
+		if (len(currentCheckpointInfo.ConfirmedServers) >= (2 * pbft.failCount)) {
+			currentCheckpointInfo.IsStable = true
+			pbft.checkPoints[checkPointArgs.SequenceNumber] = currentCheckpointInfo
+			pbft.removeStallCheckpoints(checkPointArgs.SequenceNumber)
 		}
 	}
-	bft.serverLock.UnLock()
+	pbft.serverLock.Unlock()
 }

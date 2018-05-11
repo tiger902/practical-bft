@@ -1,6 +1,4 @@
-package hashstructure
-
-//TODO: change this to make it use SHA256
+package pbft
 
 // This was adapted from https://github.com/mitchellh/hashstructure/blob/master/hashstructure.go
 

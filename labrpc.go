@@ -1,4 +1,4 @@
-package labrpc
+package pbft
 
 //
 // channel-based RPC, for 824 labs.
