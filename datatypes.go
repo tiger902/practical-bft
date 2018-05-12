@@ -35,6 +35,9 @@ type PBFT struct {
 	viewChangeComplete chan int
 }
 
+//Dummy reply
+type RPCReply struct {}
+
 //!struct used as argument to multicast command
 type CommandArgs struct {
 	SpecificArguments 	interface{}

@@ -5,29 +5,30 @@ import "log"
 //  HandlePrePrepareRPC receives and processes preprepare commands
 //
 // \param args 
-func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs) {
+func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs, reply *RPCReply) error {
 
 	if pbft.isChangingView() {
-		return
+		log.Print("[HandlePrePrepareRPC] pbft.isChangingView() returned true")
+		return nil
 	}
 
 	preprepareCommandArgs, ok := args.SpecificArguments.(PrePrepareCommandArg)
 
 	if !ok {
-		log.Fatal("[handlePrePrepareRPC] preprepare command args failed")
+		log.Fatal("[handlePrePrepareRPC] args.SpecificArguments.(PrePrepareCommandArg) failed")
 	}
 
 	prePrepareNoClientMessageArgs := preprepareCommandArgs.PreprepareNoClientMessage
 
 	prePrepareNoClientMessages, ok1 := prePrepareNoClientMessageArgs.SpecificArguments.(PreprepareWithNoClientMessage)
 	if !ok1 {
-		log.Fatal("[handlePrePrepareRPC] preprepare command args failed")
+		log.Fatal("[handlePrePrepareRPC]  prePrepareNoClientMessageArgs.SpecificArguments.(PreprepareWithNoClientMessage) failed")
 	}
 
 	// return of the message digest does not match with the one that will be calculated here
 	if !verifyDigests(preprepareCommandArgs.Message, prePrepareNoClientMessages.Digest) {
-		log.Print("[handlePrePrepareRPC] preprepare command args failed")
-		return
+		log.Print("[handlePrePrepareRPC] verifyDigests(preprepareCommandArgs.Message, prePrepareNoClientMessages.Digest) returned false")
+		return nil
 	}
 	
 	pbft.serverLock.Lock()
@@ -42,7 +43,8 @@ func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs) {
 
 	}
 	if !pbft.verifySignatures(&signatureArg, &args.R_firstSig, &args.S_secondSig, leader) {
-		return
+		log.Print("[handlePrePrepareRPC] verify signatures failed")
+		return nil
 	}
 
 	signatureArg = verifySignatureArg {
@@ -50,13 +52,15 @@ func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs) {
 
 	}
 	if !pbft.verifySignatures(&signatureArg, &prePrepareNoClientMessageArgs.R_firstSig, &prePrepareNoClientMessageArgs.S_secondSig, leader) {
-		return
+		log.Print("[handlePrePrepareRPC] verify signatures on prepare no client messages failed")
+		return nil
 	}
 
 
 	// check the view
 	if (view != prePrepareNoClientMessages.View) {
-		return
+		log.Print("[handlePrePrepareRPC] make sure our idea of the current view is the same")
+		return nil
 	}
 
 	// add entry to the log
@@ -72,14 +76,16 @@ func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs) {
 
 	pbft.newValidCommad <- true
 	go pbft.sendRPCs(pbft.makeArguments(prepareCommand), PREPARE)
+
+	return nil
 }
 
 
 //!< Handle the RPC to prepare messages
-func (pbft *PBFT) HandlePrepareRPC(args CommandArgs) {
+func (pbft *PBFT) HandlePrepareRPC(args CommandArgs, reply *RPCReply) error {
 
 	if pbft.isChangingView() {
-		return
+		return nil
 	}
 
 	pbft.commandRecieved <- true
@@ -97,7 +103,8 @@ func (pbft *PBFT) HandlePrepareRPC(args CommandArgs) {
 	}
 	// check that the signature of the prepare command match
 	if !pbft.verifySignatures(&signatureArg, &args.R_firstSig, &args.S_secondSig, prepareArgs.SenderIndex) {
-		return
+		log.Print("[HandlePrepareRPC] signatures of the prepare command args don't match")
+		return nil
 	}
 
 	logEntryItem, ok1 := pbft.serverLog[prepareArgs.SequenceNumber]
@@ -108,22 +115,24 @@ func (pbft *PBFT) HandlePrepareRPC(args CommandArgs) {
 	
 	// do nothing if we did not receive a preprepare
 	if !ok1 {
-		return
+		log.Print("[HandlePrepareRPC] did not recieve a preprepare")
+		return nil
 	}
 
 	// do not accept of different views, or different signatures
 	if (prepareArgs.View != pbft.view) || (prepareArgs.Digest != logEntryItem.commandDigest) {
-		return
+		log.Print("[HandlePrepareRPC] saw different view or different digest")
+		return nil
 	}
 
 	// TODO: check for the sequenceNumber ranges for the watermarks
 
 
-	pbft.serverLog[prepareArgs.SequenceNumber].prepareCount++
-
+	majority := pbft.calculateMajority()
 	// return if already prepared
-	if logEntryItem.prepared {
-		return
+	if len(logEntryItem.prepareArgs) >= majority {
+		log.Printf("[HandlePrepareRPC] already prepared, so exiting")
+		return nil
 	}
 
 	// We define the predicate prepared to be true iff replica has inserted in its 
@@ -134,29 +143,31 @@ func (pbft *PBFT) HandlePrepareRPC(args CommandArgs) {
 
 
 	// go into the commit phase for this command after 2F + 1 replies
-	f := (len(pbft.peers) - 1) / 3
-	majority := 2*f + 1
+	pbft.serverLog[prepareArgs.SequenceNumber].prepareArgs[prepareArgs.SenderIndex] = args
 
-	if (logEntryItem.prepareCount >= majority) {
-		logEntryItem.prepared = true
-		pbft.serverLog[prepareArgs.SequenceNumber].commitCount++
+	if ( len(logEntryItem.prepareArgs) == majority) {
  	   commitArgs := CommitArg{
 						View: pbft.view,
 						SequenceNumber: prepareArgs.SequenceNumber,
 						Digest: prepareArgs.Digest,
 						SenderIndex: pbft.serverID,
 					}
-	
-		go pbft.sendRPCs(pbft.makeArguments(commitArgs), COMMIT)
+
+		commitArg :=  pbft.makeArguments(commitArgs)
+		pbft.serverLog[prepareArgs.SequenceNumber].commitArgs[prepareArgs.SenderIndex] = commitArg
+
+		go pbft.sendRPCs(commitArg, COMMIT)
 	}
 
+	return nil
 }
 
 // Handles the commit RPC 
-func (pbft *PBFT) HandleCommitRPC(args CommandArgs) {
+func (pbft *PBFT) HandleCommitRPC(args CommandArgs, reply *RPCReply) error {
 
 	if pbft.isChangingView() {
-		return
+		log.Print("[HandleCommitRPC] currently changing views")
+		return nil
 	}
 
 	pbft.commandRecieved <- true
@@ -178,20 +189,26 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs) {
 	// TODO: verify signatures of this thing
 
 	if commitArgs.View != pbft.view {
-		return
+		log.Print("[HandleCommitRPC] Current view does not match request")
+		return nil
 	}
 
 	logEntryItem, ok := pbft.serverLog[commitArgs.SequenceNumber]
 	
 	// do nothing if we did not receive a preprepare
 	if !ok {
-		return
+		log.Print("[HandleCommitRPC] did not recieve a preprepare")
+		return nil
 	}
 
 	// do nothing if this entry has not been prepared
-	// TODO: is this the behavior we want? 
-	if !logEntryItem.prepared {
-		return
+	// TODO: is this the behavior we want?
+
+	majority := pbft.calculateMajority()
+	// return if already prepared
+	if len(logEntryItem.prepareArgs) < majority {
+		log.Printf("[HandleCommitRPC] not prepared, so exiting")
+		return nil
 	}
 
 	signatureArg := verifySignatureArg {
@@ -200,21 +217,19 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs) {
 	}
 	// check that the signature of the prepare command match
 	if !pbft.verifySignatures(&signatureArg, &args.R_firstSig, &args.S_secondSig, commitArgs.SenderIndex) {
-		return
+		log.Print("[HandleCommitRPC] signature of the preprepare does not match")
+		return nil
 	}
 
 	// do nothing if the reply has been sent already
 	if logEntryItem.clientReplySent {
-		return
+		log.Print("[HandleCommitRPC] reply to client has already been sent")
+		return nil
 	}
 	
-	// go into the commit phase for this command after 2F + 1 replies
-	f := (len(pbft.peers) - 1) / 3
-	majority := 2*f + 1
+	// go into the commit phase for this command after 2F + 1 replies +
 
-	logEntryItem.commitCount++
-
-	if ((logEntryItem.commitCount >= majority) && !logEntryItem.clientReplySent) {
+	if ((len(logEntryItem.commitArgs) == majority) && !logEntryItem.clientReplySent) {
 		logEntryItem.clientReplySent = true
 		clientCommand := logEntryItem.message.(Command)
  	   	clientCommandReply := CommandReply {
@@ -240,11 +255,14 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs) {
 
 		pbft.commandExecuted <- true
 	}
+
+	return nil
 }
 
 
+
 // Handles the view change RPC 
-func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs) {
+func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs, reply *RPCReply) error {
 
 	pbft.changeState(CHANGING_VIEW)
 
@@ -255,7 +273,8 @@ func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs) {
 
 	// do nothing is this is not for this server
 	if ((viewChange.NextView % len(pbft.peers)) != pbft.serverID) {
-		return
+		log.Print("[HandleViewChangeRPC] not intended for this server")
+		return nil
 	}
 
 	signatureArg := verifySignatureArg {
@@ -264,7 +283,8 @@ func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs) {
 	}
 	// check that the signature of the prepare command match
 	if !pbft.verifySignatures(&signatureArg, &args.R_firstSig, &args.S_secondSig, viewChange.SenderID) {
-		return
+		log.Print("[HandleViewChangeRPC] signatures of the preprepare command don't match")
+		return nil
 	}
 
 	pbft.serverLock.Lock()
@@ -273,7 +293,8 @@ func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs) {
 	// return if this server's view is more than that of the sender
 	// of this server is not supposed to be a leader
 	if ((viewChange.NextView <= pbft.view) || ((viewChange.NextView % len(pbft.peers))  != pbft.view)) {
-		return
+		log.Print("[HandleViewChangeRPC] server's view is more than the sender")
+		return nil
 	}
 
 	// TODO: verify all the prepare messages that are in the viewChange argument to make
@@ -286,14 +307,15 @@ func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs) {
 		pbft.viewChanges[viewChange.NextView] = make(map[int]CommandArgs)
 	} else {
 		if _, ok1 := viewChanges[viewChange.SenderID]; ok1 {
-			return
+			log.Print("[HandleViewChangeRPC] view change message does not exist yet")
+			return nil
 		}
 	}
  
 	pbft.viewChanges[viewChange.NextView][viewChange.SenderID] =  args
 
 	// if we now have the majority of view change requests
-	if (len(pbft.viewChanges[viewChange.NextView]) >= 2 * pbft.failCount) {
+	if (len(pbft.viewChanges[viewChange.NextView]) >= 2 * pbft.numFailableServers()) {
 
 		pbft.viewChanges[viewChange.NextView][pbft.serverID] = pbft.makeViewChangeArguments()
 
@@ -321,16 +343,18 @@ func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs) {
 		go pbft.sendRPCs(pbft.makeArguments(newView), NEW_VIEW)
 	}
 
+	return nil
+
 }
 
 //!< Function to handle the new view RPC from the leader
-func (pbft *PBFT) HandleNewViewRPC(args CommandArgs) {
+func (pbft *PBFT) HandleNewViewRPC(args CommandArgs, reply *RPCReply) error {
 
 
 	newView, ok := args.SpecificArguments.(NewView)
 
 	if !ok {
-		log.Fatal("[handlePrePrepareRPC] preprepare command args failed")
+		log.Fatal("[HandleNewViewRPC] preprepare command args failed")
 	}
 
 	pbft.serverLock.Lock()
@@ -338,7 +362,8 @@ func (pbft *PBFT) HandleNewViewRPC(args CommandArgs) {
 
 	// do nothing if we are already at a higher view
 	if (newView.NextView < pbft.view) {
-		return
+		log.Print("[HandleNewViewRPC] already have a higher view")
+		return nil
 	}
 
 	// find the new leader
@@ -356,14 +381,16 @@ func (pbft *PBFT) HandleNewViewRPC(args CommandArgs) {
 	}
 	// check that the signature of the prepare command match
 	if !pbft.verifySignatures(&signatureArg, &args.R_firstSig, &args.S_secondSig, newLeader) {
-		return
+		log.Print("[HandleNewViewRPC] signatures of preprepare command messages don't match")
+		return nil
 	}
 
 	// check the validity of view change messages
 	for serverID, viewChangeArgs := range newView.ViewChangeMessages {
 		viewChangeMessage := viewChangeArgs.SpecificArguments.(NewView)
 		if viewChangeMessage.NextView != newView.NextView {
-			return
+			log.Print("[HandleNewViewRPC] view change messages not valid")
+			return nil
 		}
 
 		signatureArg = verifySignatureArg {
@@ -372,7 +399,8 @@ func (pbft *PBFT) HandleNewViewRPC(args CommandArgs) {
 		}
 
 		if !pbft.verifySignatures(&signatureArg, &viewChangeArgs.R_firstSig, &viewChangeArgs.S_secondSig, serverID) {
-			return
+			log.Print("[HandleNewViewRPC] signature not valid")
+			return nil
 		}
 	}
 
@@ -405,18 +433,21 @@ func (pbft *PBFT) HandleNewViewRPC(args CommandArgs) {
 	}
 	pbft.view = newView.NextView
 	pbft.viewChangeComplete <- len(allPreprepareMessage)
+
+	return nil
 }
 
 
-func (pbft *PBFT) HandleCheckPointRPC(args CommandArgs) {
+func (pbft *PBFT) HandleCheckPointRPC(args CommandArgs, reply *RPCReply) error {
 
 	if pbft.isChangingView() {
-		return
+		log.Print("[HandleCheckPointRPC] currently changing view")
+		return nil
 	}
 
 	checkPointArgs, ok := args.SpecificArguments.(CheckPointArgs)
 	if !ok {
-		log.Fatal("[handlePrePrepareRPC] preprepare command args failed")
+		log.Fatal("[HandleCheckPointRPC] preprepare command args failed")
 	}
 
 	signatureArg := verifySignatureArg {
@@ -425,16 +456,19 @@ func (pbft *PBFT) HandleCheckPointRPC(args CommandArgs) {
 	}
 	// check that the signature of the prepare command match
 	if !pbft.verifySignatures(&signatureArg, &args.R_firstSig, &args.S_secondSig, checkPointArgs.SenderIndex) {
-		return
+		log.Fatal("[HandleCheckPointRPC] signature not valid")
+		return nil
 	}
 
 	// return if you do not have this checkpoint started, otherwise check the digests
 	checkPointInfo, ok := pbft.checkPoints[checkPointArgs.SequenceNumber];
 	if !ok {
-		return 
+		log.Fatal("[HandleCheckPointRPC] checkpoint not started")
+		return nil
 	}
 	if !verifyDigests(checkPointInfo, checkPointArgs.Digest) {
-		return
+		log.Fatal("[HandleCheckPointRPC] checkpoint digest invalid")
+		return nil
 	}
 
 	pbft.serverLock.Lock()
@@ -445,11 +479,13 @@ func (pbft *PBFT) HandleCheckPointRPC(args CommandArgs) {
 
 	// if this checkpoint is now stable, delete all those that are before this one
 	if !currentCheckpointInfo.IsStable {
-		if (len(currentCheckpointInfo.ConfirmedServers) >= (2 * pbft.failCount)) {
+		if (len(currentCheckpointInfo.ConfirmedServers) >= (2 * pbft.numFailableServers())) {
 			currentCheckpointInfo.IsStable = true
 			pbft.checkPoints[checkPointArgs.SequenceNumber] = currentCheckpointInfo
 			pbft.removeStallCheckpoints(checkPointArgs.SequenceNumber)
 		}
 	}
 	pbft.serverLock.Unlock()
+
+	return nil
 }

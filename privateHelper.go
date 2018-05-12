@@ -171,6 +171,9 @@ func (pbft *PBFT) startViewChange() {
 	pbft.sendRPCs(viewChangeArgs, VIEW_CHANGE)
 }
 
+func (pbft *PBFT) numFailableServers() int {
+	return (len(pbft.peers) - 1) / 3
+}
 
 // helper function to make a checkpoint
 func (pbft *PBFT) makeCheckpoint(checkPointInfo CheckPointInfo) {

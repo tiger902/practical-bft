@@ -29,6 +29,7 @@ type CommandReply struct {
 
 //!struct used by the client to issue a new command
 type Command struct {
+	ClientAddress string
 	CommandType string			//!< type of the command that neeeds to be done
 	CommandData interface{}		//!< data for the operation that the client needs to the operation to be done
 	Timestamp time.Time				//!< timestamp for the operation

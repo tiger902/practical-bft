@@ -1,6 +1,6 @@
 package pbft
 
-// This was adapted from https://github.com/mitchellh/hashstructure/blob/master/hashstructure.go
+// This was *heavily* adapted from https://github.com/mitchellh/hashstructure/blob/master/hashstructure.go
 
 import (
 	"encoding/binary"
