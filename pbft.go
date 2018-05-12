@@ -1,7 +1,8 @@
 package pbft
 
 import (
-	"crypto"
+	"crypto/ecdsa"
+	"time"
 )
 
 /*
@@ -10,7 +11,7 @@ import (
 * Not too difficult to implement but I'm not sure of a better solution than hard coding IP addresses.
 * We'll need to have everything implemented locally first (the hard part) then transitioning to this will be easy
 * See https://www.cs.princeton.edu/courses/archive/fall17/cos418/docs/P3-go-rpc.zip
-*/
+ */
 
 //
 // Filename pbft.go
@@ -28,22 +29,19 @@ func (pbft *PBFT) GetState() bool {
 
 	pbft.serverLock.Lock()
 	defer pbft.serverLock.Unlock()
-	return ( pbft.view % len(pbft.peers) == pbft.serverID )
+	return (pbft.view%len(pbft.peers) == pbft.serverID)
 }
 
 // starts a new command
-// return the 
+// return the
 func (pbft *PBFT) Start(clientCommand Command) {
-
-	// TODO: verify that the messages have not been changed on their way from the client
-
 
 	// if not primary, send the request to the primary
 	pbft.serverLock.Lock()
+	defer pbft.serverLock.Unlock()
 	leader := pbft.view % len(pbft.peers)
 
-	if (pbft.serverID != leader) {
-		pbft.serverLock.Unlock()
+	if pbft.serverID != leader {
 		commandArg := pbft.makeArguments(clientCommand)
 		pbft.sendRPCs(commandArg, FORWARD_COMMAND)
 		return
@@ -51,27 +49,20 @@ func (pbft *PBFT) Start(clientCommand Command) {
 
 	// do nothing if the time is before what we have sent already
 	if lastReplyTimestamp, ok := pbft.clientRegisters[clientCommand.ClientID]; ok {
-		if  clientCommand.Timestamp.Before(lastReplyTimestamp) {
-			pbft.serverLock.Unlock()
+		if clientCommand.Timestamp.Before(lastReplyTimestamp) {
 			return
 		}
 	}
-	
-	view := pbft.view
-	sequenceNumber := pbft.sequenceNumber
 
-	pbft.sequenceNumber++
-	pbft.serverLock.Unlock()
-	
 	// make a digest for the command from the clint
 	hash, err := Hash(clientCommand, nil)
 	if err != nil {
 		panic(err)
 	}
 
-	prePrepareCommandArgsNoMessage :=  PreprepareWithNoClientMessage{
-		View:           view,
-		SequenceNumber: sequenceNumber,
+	prePrepareCommandArgsNoMessage := PreprepareWithNoClientMessage{
+		View:           pbft.view,
+		SequenceNumber: pbft.sequenceNumber,
 		Digest:         hash,
 	}
 
@@ -79,7 +70,7 @@ func (pbft *PBFT) Start(clientCommand Command) {
 
 	prePrepareCommandArgs := PrePrepareCommandArg{
 		PreprepareNoClientMessage: signedPreprepareNoMessage,
-		Message: clientCommand,
+		Message:                   clientCommand,
 	}
 
 	// multicast to all the other servers
@@ -87,8 +78,8 @@ func (pbft *PBFT) Start(clientCommand Command) {
 
 	// process the recived command accordingly
 	pbft.addLogEntry(&prePrepareCommandArgs)
+	pbft.sequenceNumber++
 }
-
 
 // stops the server
 func (pbft *PBFT) Kill() {
@@ -99,28 +90,38 @@ func (pbft *PBFT) Kill() {
 // Make() must return quickly, so it should start goroutines
 // for any long-running work.
 //
-func Make(privateKey crypto.PrivateKey, publicKeys []crypto.PublicKey, peers []*ClientEnd, serverID int,
-		  persister *Persister) *PBFT {
+func Make(privateKey ecdsa.PrivateKey, publicKeys []ecdsa.PublicKey, peers []*ClientEnd, serverID int,
+	persister *Persister) *PBFT {
 
 	pbft := &PBFT{}
+
+	pbft.serverLock.Lock()
+	pbft.privateKey = privateKey
+	pbft.publicKeys = publicKeys
 	pbft.peers = peers
 	pbft.persister = persister
-	pbft.serverID = serverID
+	pbft.serverID = 0
 	pbft.sequenceNumber = 0
-	pbft.numberOfServers = len(peers)
+	pbft.commandsChannel = make(chan int, 10)
+	pbft.uncommittedCommands = 0
+	pbft.state = IDLE
+	pbft.lastCheckPointSeqNumber = 0
+	pbft.view = 0
+	pbft.serverLog = make(map[int]logEntry)
+	pbft.clientRegisters = make(map[int]time.Time)
+	pbft.storedState = make(map[string]interface{})
+	pbft.checkPoints = make(map[int]CheckPointInfo)
+	pbft.viewChanges = make(map[int]map[int]CommandArgs)
+	pbft.newValidCommad = make(chan bool, 10)
+	pbft.commandExecuted = make(chan bool, 10)
+	pbft.commandRecieved = make(chan bool, 10)
+	pbft.viewChangeComplete = make(chan int, 10)
 
-	// TODO: make sure to update the variable from persist
-
-	// start a go routine to make sure that we receive heartbeats from the primary
-	// this will essentially be a time out that then intiates a view change
-
-	// add more code and return the new server
+	pbft.readPersist(persister.ReadPBFTState())
+	pbft.serverLock.Unlock()
 
 	// start a go routine for handling command
-	// TODO: change the size dynamically
-	//pbft.commandsChannel = make(chan interface{}, 2*len(peers))
 	go pbft.runningState()
 
 	return pbft
 }
-

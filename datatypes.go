@@ -12,27 +12,27 @@ type PBFT struct {
 	privateKey  ecdsa.PrivateKey			//!< Private key for this server
 	publicKeys     []ecdsa.PublicKey 		//!< Array of publick keys for all servers
 	peers     []*ClientEnd 	//!< Array of all the other server sockets for RPC
-	failCount 		int
-	numberOfServers int 	
 	persister *Persister          	//!< Persister to be used to store data for this server in permanent storage
 	serverID        int           	//!< Index into peers[] for this server
 	sequenceNumber  int				//!< last sequence number 
 	commandsChannel chan int		//!< channel for commands
 	uncommittedCommands int			//!< store the number of commands that we are waiting for
 	state 				int 		//!< the state of the server
+	serverStateLock      sync.Mutex
 	lastCheckPointSeqNumber int 	//!< the sequence number of the last checkpoint
 	view			int 				//!< the current view of the system
 	serverLog 		map[int]logEntry	//!< to keep track of all the commands that have been seen regard less of the stage
 	serverLock      sync.Mutex 			//!< Lock to be when changing the sequenceNumber,
 	clientRegisters map[int]time.Time	// to keep track of the last reply that has been sent to this client
-	storedState		interface{}			// this is the state that the application is keeping for this application
+	storedState		map[string]interface{}			// this is the state that the application is keeping for this application
 	checkPoints 	map[int]CheckPointInfo
 	viewChanges		map[int]map[int]CommandArgs // only used when we are performing a view change. The first index is
 												// is for the new view, and the second is for the serverI
 												// is for the new view, and the second is for the serverID
 	newValidCommad chan bool
 	commandExecuted chan bool
-	viewChangeComplete chan bool
+	commandRecieved chan bool
+	viewChangeComplete chan int
 }
 
 //!struct used as argument to multicast command

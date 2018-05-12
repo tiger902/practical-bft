@@ -9,7 +9,30 @@ import (
 	"log"
 	"math"
 	"encoding/binary"
+	"bytes"
+	"encoding/gob"
 )
+
+
+// helper to check if in viewchange
+func (pbft *PBFT) isChangingView() bool {
+
+	pbft.serverStateLock.Unlock()
+	defer pbft.serverStateLock.Unlock()
+	if (pbft.state == CHANGING_VIEW) {
+		return true
+
+	}
+	return false
+}
+
+// helper to check if in viewchange
+func (pbft *PBFT) changeState(newState int) {
+
+	pbft.serverStateLock.Unlock()
+	defer pbft.serverStateLock.Unlock()
+	pbft.state = newState
+}
 
 // Processes commands in a loop as they come from commandsChannel
 func (pbft *PBFT) runningState() {
@@ -27,7 +50,9 @@ func (pbft *PBFT) runningState() {
 				<-timer.C
 			}
 			if (pbft.state == PROCESSING_COMMAND) {
+				pbft.serverStateLock.Lock()
 				pbft.state = CHANGING_VIEW
+				pbft.serverStateLock.Unlock()
 				pbft.startViewChange()
 			}
 
@@ -36,12 +61,20 @@ func (pbft *PBFT) runningState() {
 		case <-pbft.newValidCommad:
 			pbft.uncommittedCommands++
 			if (pbft.state == IDLE) {
+				pbft.serverStateLock.Lock()
 				pbft.state = PROCESSING_COMMAND
+				pbft.serverStateLock.Unlock()
 				if !timer.Stop() {
 					<-timer.C
 				}
 				timer.Reset(time.Millisecond * time.Duration(T))
 			}
+
+		case <- pbft.commandRecieved:
+			if !timer.Stop() {
+				<-timer.C
+			}
+			timer.Reset(time.Millisecond * time.Duration(T))
 
 		// decrement the number of commands we are waiting for and 
 		// stop the timer if there is no more commands to run, otherwise restart
@@ -57,20 +90,23 @@ func (pbft *PBFT) runningState() {
 				}
 				
 				if (pbft.uncommittedCommands == 0) {
+					pbft.serverStateLock.Lock()
 					pbft.state = IDLE
+					pbft.serverStateLock.Unlock()
 				} else {
 					timer.Reset(time.Millisecond * time.Duration(T))
 				}
 			}
 
-		// TODO: this means that we will need to bft.uncommittedCommands to zero when we are
-		// done with the view change
-		case <-pbft.viewChangeComplete:
+		case uncommittedCount := <-pbft.viewChangeComplete:
+			pbft.uncommittedCommands = uncommittedCount
+			pbft.serverStateLock.Lock()
 			if (pbft.uncommittedCommands == 0) {
 				pbft.state = IDLE
 			} else {
 				pbft.state = PROCESSING_COMMAND
 			}
+			pbft.serverStateLock.Unlock()
 		}
 	}
 
@@ -119,6 +155,7 @@ func (pbft *PBFT) makeViewChangeArguments() CommandArgs {
 
 
 // reply to the client
+//TODO: look into how reply to client is going to work
 func (pbft *PBFT) replyToClient(clientCommandReply CommandReply) {
 	// TODO: implement this
 	// TODO: update the timestamp of the last sent reply
@@ -388,12 +425,51 @@ func (pbft *PBFT) ReceiveForwardedCommand(command CommandArgs) {
 
 // Write the relavant state of PBFT to persistent storage
 func (pbft *PBFT) persist() {
-	
+	w := new(bytes.Buffer)
+	e := gob.NewEncoder(w)
+
+	e.Encode(pbft.sequenceNumber)
+	e.Encode(pbft.uncommittedCommands)
+	e.Encode(pbft.lastCheckPointSeqNumber)
+	e.Encode(pbft.serverLog)
+	e.Encode(pbft.checkPoints)
+	e.Encode(pbft.storedState)
+
+	data := w.Bytes()
+
+	pbft.persister.SavePBFTState(data)
 }
 
 //! Restore previously persisted state.
 func (pbft *PBFT) readPersist(data []byte) {
-	
+
+	r := bytes.NewBuffer(data)
+	d := gob.NewDecoder(r)
+
+	if d.Decode(&pbft.sequenceNumber) != nil {
+		pbft.sequenceNumber = 0
+	}
+
+	if d.Decode(&pbft.uncommittedCommands) != nil {
+		pbft.uncommittedCommands = 0
+	}
+
+	if d.Decode(&pbft.lastCheckPointSeqNumber) != nil {
+		pbft.lastCheckPointSeqNumber = 0
+	}
+
+	if d.Decode(&pbft.serverLog) != nil {
+		pbft.serverLog = make(map[int]logEntry)
+	}
+
+	if d.Decode(&pbft.checkPoints) != nil {
+		pbft.checkPoints = make(map[int]CheckPointInfo)
+	}
+
+	if d.Decode(&pbft.storedState) != nil {
+		pbft.storedState = make(map[string]interface{})
+	}
+
 }
 
 func (pbft *PBFT) makeArguments(specificArgument interface{}) CommandArgs {

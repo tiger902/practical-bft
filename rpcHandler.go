@@ -7,6 +7,10 @@ import "log"
 // \param args 
 func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs) {
 
+	if pbft.isChangingView() {
+		return
+	}
+
 	preprepareCommandArgs, ok := args.SpecificArguments.(PrePrepareCommandArg)
 
 	if !ok {
@@ -59,14 +63,14 @@ func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs) {
 	pbft.addLogEntry(&preprepareCommandArgs)
 
 	// broadcast prepare messages to everyone if you are not the leader
-	prepareCommand := PrepareCommandArg { 
-						View: prePrepareNoClientMessages.View,
-						SequenceNumber: prePrepareNoClientMessages.SequenceNumber,
-						Digest: prePrepareNoClientMessages.Digest,
-						SenderIndex: pbft.serverID,
-					}
+	prepareCommand := PrepareCommandArg{
+		View:           prePrepareNoClientMessages.View,
+		SequenceNumber: prePrepareNoClientMessages.SequenceNumber,
+		Digest:         prePrepareNoClientMessages.Digest,
+		SenderIndex:    pbft.serverID,
+	}
 
-
+	pbft.newValidCommad <- true
 	go pbft.sendRPCs(pbft.makeArguments(prepareCommand), PREPARE)
 }
 
@@ -74,6 +78,11 @@ func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs) {
 //!< Handle the RPC to prepare messages
 func (pbft *PBFT) HandlePrepareRPC(args CommandArgs) {
 
+	if pbft.isChangingView() {
+		return
+	}
+
+	pbft.commandRecieved <- true
 	prepareArgs, ok := args.SpecificArguments.(PrepareCommandArg)
 	if !ok {
 		log.Fatal("[handlePrePrepareRPC] preprepare command args failed")
@@ -123,6 +132,7 @@ func (pbft *PBFT) HandlePrepareRPC(args CommandArgs) {
 	// whether the prepares match the pre-prepare by checking that they have the
 	// same view, sequence number, and digest
 
+
 	// go into the commit phase for this command after 2F + 1 replies
 	f := (len(pbft.peers) - 1) / 3
 	majority := 2*f + 1
@@ -139,10 +149,17 @@ func (pbft *PBFT) HandlePrepareRPC(args CommandArgs) {
 	
 		go pbft.sendRPCs(pbft.makeArguments(commitArgs), COMMIT)
 	}
+
 }
 
 // Handles the commit RPC 
 func (pbft *PBFT) HandleCommitRPC(args CommandArgs) {
+
+	if pbft.isChangingView() {
+		return
+	}
+
+	pbft.commandRecieved <- true
 
 	commitArgs, ok := args.SpecificArguments.(PrepareCommandArg)
 	if !ok {
@@ -220,12 +237,16 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs) {
 		}
 
 		go pbft.replyToClient(clientCommandReply)
+
+		pbft.commandExecuted <- true
 	}
 }
 
 
 // Handles the view change RPC 
 func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs) {
+
+	pbft.changeState(CHANGING_VIEW)
 
 	viewChange, ok := args.SpecificArguments.(ViewChange)
 	if !ok {
@@ -304,6 +325,8 @@ func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs) {
 
 //!< Function to handle the new view RPC from the leader
 func (pbft *PBFT) HandleNewViewRPC(args CommandArgs) {
+
+
 	newView, ok := args.SpecificArguments.(NewView)
 
 	if !ok {
@@ -380,10 +403,17 @@ func (pbft *PBFT) HandleNewViewRPC(args CommandArgs) {
 
 		go pbft.sendRPCs(pbft.makeArguments(prepareCommand), PREPARE)
 	}
+	pbft.view = newView.NextView
+	pbft.viewChangeComplete <- len(allPreprepareMessage)
 }
 
 
 func (pbft *PBFT) HandleCheckPointRPC(args CommandArgs) {
+
+	if pbft.isChangingView() {
+		return
+	}
+
 	checkPointArgs, ok := args.SpecificArguments.(CheckPointArgs)
 	if !ok {
 		log.Fatal("[handlePrePrepareRPC] preprepare command args failed")
