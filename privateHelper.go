@@ -10,6 +10,7 @@ import (
 	"log"
 	"math"
 	"math/big"
+	"net/rpc"
 	"time"
 )
 
@@ -31,6 +32,12 @@ func (pbft *PBFT) changeState(newState int) {
 	pbft.serverStateLock.Unlock()
 	defer pbft.serverStateLock.Unlock()
 	pbft.state = newState
+}
+
+// helper function to calcule the majority
+func (pbft *PBFT) calculateMajority() int {
+	f := (len(pbft.peers) - 1) / 3
+	return (2*f + 1)
 }
 
 // Processes commands in a loop as they come from commandsChannel
@@ -111,13 +118,6 @@ func (pbft *PBFT) runningState() {
 
 }
 
-// helper function to calcule the majority
-func (pbft *PBFT) calculateMajority() int {
-
-	f := (len(pbft.peers) - 1) / 3
-	return (2*f + 1)
-}
-
 // Helper method for making a view change
 // should be called by someone who holds a lock
 func (pbft *PBFT) makeViewChangeArguments() CommandArgs {
@@ -153,10 +153,14 @@ func (pbft *PBFT) makeViewChangeArguments() CommandArgs {
 
 // reply to the client
 //TODO: look into how reply to client is going to work
-func (pbft *PBFT) replyToClient(clientCommandReply CommandReply) {
-	// TODO: implement this
-	// TODO: update the timestamp of the last sent reply
-	// using the clientRegisters log
+func (pbft *PBFT) replyToClient(clientCommandReply CommandReply, clientAddress string) {
+
+	client, err := rpc.DialHTTP("tcp", clientAddress+":1234")
+	if err != nil {
+		log.Fatal("dialing:", err)
+	}
+
+	client.Go("Client.ReceiveReply", clientCommandReply, nil /*reply*/, nil /*done channel*/)
 }
 
 // helper function to change the view
@@ -304,7 +308,8 @@ func (pbft *PBFT) addLogEntry(args *PrePrepareCommandArg) bool {
 
 		// if a request has been processed already, just reply to the client
 		if len(logEntryItem.commitArgs) >= pbft.calculateMajority() {
-			go pbft.replyToClient()
+			clientCommand := logEntryItem.message.(Command)
+			go pbft.replyToClient(clientCommandReply, clientCommand.ClientAddress)
 			return false
 		}
 
@@ -332,7 +337,7 @@ func (pbft *PBFT) addLogEntry(args *PrePrepareCommandArg) bool {
 func (pbft *PBFT) removeStallCheckpoints(largestStableSequenceNumber int) {
 
 	checkPoints := make(map[int]CheckPointInfo)
-	for sequenceNumber, _ := range pbft.checkPoints {
+	for sequenceNumber := range pbft.checkPoints {
 		if sequenceNumber >= pbft.lastCheckPointSeqNumber {
 			checkPoints[sequenceNumber] = pbft.checkPoints[sequenceNumber]
 		}
@@ -415,7 +420,10 @@ func (pbft *PBFT) ReceiveForwardedCommand(command CommandArgs) {
 }
 
 // Write the relavant state of PBFT to persistent storage
+// should be called by someone with a lock
 func (pbft *PBFT) persist() {
+
+	// TODO: maybe copy this and then save it from that copy so that we do not stall the protocol
 	w := new(bytes.Buffer)
 	e := gob.NewEncoder(w)
 

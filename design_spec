@@ -49,7 +49,8 @@ Evaluation
 Our own changes
 - We do not have the maximum and the high and low marks
 - No seperation between the network and tranport layers
-- 
+- We introduced persistent state, which is not mentioned in the paper
+- We decoupled the protocol from the services it provides by introducing a new layer at the top
 
 Design choices
 - RSA and public crypo

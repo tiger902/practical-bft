@@ -10,6 +10,8 @@ func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs, reply *RPCReply) error {
 		return nil
 	}
 
+	pbft.commandRecieved <- true
+
 	preprepareCommandArgs, ok := args.SpecificArguments.(PrePrepareCommandArg)
 	if !ok {
 		log.Fatal("[handlePrePrepareRPC] args.SpecificArguments.(PrePrepareCommandArg) failed")
@@ -67,8 +69,13 @@ func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs, reply *RPCReply) error {
 	}
 
 	pbft.newValidCommad <- true
-	go pbft.sendRPCs(pbft.makeArguments(prepareCommand), PREPARE)
 
+	go pbft.sendRPCs(prepareCommandArgs, PREPARE)
+
+	prepareCommandArg = pbft.makeArguments(prepareCommand)
+	pbft.serverLog[prepareArgs.SequenceNumber].prepareArgs[pbft.serverID] = prepareCommandArg
+	// TODO: maybe remove this save to persist
+	pbft.persist()
 	return nil
 }
 
@@ -85,17 +92,17 @@ func (pbft *PBFT) HandlePrepareRPC(args CommandArgs, reply *RPCReply) error {
 		log.Fatal("[handlePrePrepareRPC] preprepare command args failed")
 	}
 
-	pbft.serverLock.Lock()
-	defer pbft.serverLock.Unlock()
-
+	// verify the signatures
 	signatureArg := verifySignatureArg{
 		generic: prepareArgs,
 	}
-	// check that the signature of the prepare command match
 	if !pbft.verifySignatures(&signatureArg, &args.R_firstSig, &args.S_secondSig, prepareArgs.SenderIndex) {
 		log.Print("[HandlePrepareRPC] signatures of the prepare command args don't match")
 		return nil
 	}
+
+	pbft.serverLock.Lock()
+	defer pbft.serverLock.Unlock()
 
 	logEntryItem, ok1 := pbft.serverLog[prepareArgs.SequenceNumber]
 
@@ -117,9 +124,17 @@ func (pbft *PBFT) HandlePrepareRPC(args CommandArgs, reply *RPCReply) error {
 
 	// TODO: check for the sequenceNumber ranges for the watermarks
 
-	majority := pbft.calculateMajority()
+	if _, ok2 := logEntryItem.prepareArgs[prepareArgs.SenderIndex]; ok2 {
+		log.Print("[HandlePrepareRPC] already received from this server")
+		return nil
+	}
+
+	pbft.serverLog[prepareArgs.SequenceNumber].prepareArgs[prepareArgs.SenderIndex] = args
+
 	// return if already prepared
-	if len(logEntryItem.prepareArgs) >= majority {
+	if len(logEntryItem.prepareArgs) > pbft.calculateMajority() {
+		// TODO: maybe remove this save to persist
+		pbft.persist()
 		log.Printf("[HandlePrepareRPC] already prepared, so exiting")
 		return nil
 	}
@@ -131,9 +146,7 @@ func (pbft *PBFT) HandlePrepareRPC(args CommandArgs, reply *RPCReply) error {
 	// same view, sequence number, and digest
 
 	// go into the commit phase for this command after 2F + 1 replies
-	pbft.serverLog[prepareArgs.SequenceNumber].prepareArgs[prepareArgs.SenderIndex] = args
-
-	if len(logEntryItem.prepareArgs) == majority {
+	if len(logEntryItem.prepareArgs) == pbft.calculateMajority() {
 		commitArgs := CommitArg{
 			View:           pbft.view,
 			SequenceNumber: prepareArgs.SequenceNumber,
@@ -142,10 +155,12 @@ func (pbft *PBFT) HandlePrepareRPC(args CommandArgs, reply *RPCReply) error {
 		}
 
 		commitArg := pbft.makeArguments(commitArgs)
-		pbft.serverLog[prepareArgs.SequenceNumber].commitArgs[prepareArgs.SenderIndex] = commitArg
+		pbft.serverLog[prepareArgs.SequenceNumber].commitArgs[pbft.serverID] = commitArg
 
 		go pbft.sendRPCs(commitArg, COMMIT)
 	}
+	// TODO: maybe remove this save to persist
+	pbft.persist()
 
 	return nil
 }
@@ -163,6 +178,16 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs, reply *RPCReply) error {
 	commitArgs, ok := args.SpecificArguments.(PrepareCommandArg)
 	if !ok {
 		log.Fatal("[handlePrePrepareRPC] preprepare command args failed")
+	}
+
+	// verify signatures
+	signatureArg := verifySignatureArg{
+		generic: commitArgs,
+	}
+	// check that the signature of the prepare command match
+	if !pbft.verifySignatures(&signatureArg, &args.R_firstSig, &args.S_secondSig, commitArgs.SenderIndex) {
+		log.Print("[HandleCommitRPC] signature of the preprepare does not match")
+		return nil
 	}
 
 	pbft.serverLock.Lock()
@@ -189,33 +214,30 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs, reply *RPCReply) error {
 	}
 
 	// do nothing if this entry has not been prepared
-	// TODO: is this the behavior we want?
-
-	majority := pbft.calculateMajority()
-	// return if already prepared
-	if len(logEntryItem.prepareArgs) < majority {
+	if len(logEntryItem.prepareArgs) < pbft.calculateMajority() {
 		log.Printf("[HandleCommitRPC] not prepared, so exiting")
 		return nil
 	}
 
-	signatureArg := verifySignatureArg{
-		generic: commitArgs,
-	}
-	// check that the signature of the prepare command match
-	if !pbft.verifySignatures(&signatureArg, &args.R_firstSig, &args.S_secondSig, commitArgs.SenderIndex) {
-		log.Print("[HandleCommitRPC] signature of the preprepare does not match")
+	// do nothing if we already received a commit from this server
+	if _, ok2 := logEntryItem.commitArgs[commitArgs.SenderIndex]; ok2 {
+		log.Print("[HandlePrepareRPC] already received from this server")
 		return nil
 	}
+	pbft.serverLog[commitArgs.SequenceNumber].commitArgs[commitArgs.SenderIndex] = args
 
 	// do nothing if the reply has been sent already
 	if logEntryItem.clientReplySent {
+		// TODO: maybe remove this save to persist
+		pbft.persist()
+
 		log.Print("[HandleCommitRPC] reply to client has already been sent")
 		return nil
 	}
 
 	// go into the commit phase for this command after 2F + 1 replies +
 
-	if (len(logEntryItem.commitArgs) == majority) && !logEntryItem.clientReplySent {
+	if len(logEntryItem.commitArgs) == majority {
 		logEntryItem.clientReplySent = true
 		clientCommand := logEntryItem.message.(Command)
 		clientCommandReply := CommandReply{
@@ -234,13 +256,22 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs, reply *RPCReply) error {
 			}
 			pbft.checkPoints[commitArgs.SequenceNumber] = checkPointInfo
 			pbft.lastCheckPointSeqNumber = commitArgs.SequenceNumber
+
 			go pbft.makeCheckpoint(checkPointInfo)
 		}
 
-		go pbft.replyToClient(clientCommandReply)
+		lastReplyTimestamp: = pbft.clientRegisters[clientCommand.ClientID]
+		if clientCommand.Timestamp.After(lastReplyTimestamp) {
+			pbft.clientRegisters[clientCommand.ClientID] = clientCommand.Timestamp
+		}
+
+		go pbft.replyToClient(clientCommandReply, clientCommand.ClientAddress)
 
 		pbft.commandExecuted <- true
 	}
+
+	// TODO: maybe remove this for to performance
+	pbft.persist()
 
 	return nil
 }
@@ -325,9 +356,7 @@ func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs, reply *RPCReply) error {
 
 		go pbft.sendRPCs(pbft.makeArguments(newView), NEW_VIEW)
 	}
-
 	return nil
-
 }
 
 //!< Function to handle the new view RPC from the leader
