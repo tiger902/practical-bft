@@ -4,13 +4,13 @@ package pbft
 import (
 	"sync"
 	"time"
-	"crypto"
 	"math/big"
+	"crypto/ecdsa"
 )
 //! A Go object implementing a single PBFT peer.
 type PBFT struct {
-	privateKey  crypto.PrivateKey			//!< Private key for this server
-	publicKeys     []crypto.PublicKey 		//!< Array of publick keys for all servers
+	privateKey  ecdsa.PrivateKey			//!< Private key for this server
+	publicKeys     []ecdsa.PublicKey 		//!< Array of publick keys for all servers
 	peers     []*ClientEnd 	//!< Array of all the other server sockets for RPC
 	failCount 		int
 	numberOfServers int 	

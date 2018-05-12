@@ -4,9 +4,11 @@ import (
 	"time"
 	"errors"
 	"crypto/rand"
+	"crypto/ecdsa"
 	"math/big"
 	"log"
 	"math"
+	"encoding/binary"
 )
 
 // Processes commands in a loop as they come from commandsChannel
@@ -237,16 +239,19 @@ func verifyDigests(arg interface{}, digest uint64) bool {
 func (pbft *PBFT) verifySignatures(args *verifySignatureArg, r_firstSig *big.Int, s_secondSig *big.Int, peerID int) bool {
 
 	// hash the received command so that we can use the hash for verification of the signatures 
-	//hash, err := Hash(args, nil)
-	/*if err != nil {
+	hash, err := Hash(args, nil)
+	if err != nil {
 		panic(err)
-	}*/
+	}
 
 	// check that the signature of the prepare command match
-	//TODO: verify if we have time
-	/*if !rsa.verifyVerify(&pbft.publicKeys[peerID], hash, r_firstSig, s_secondSig) {
+
+	hashByteArray := make([]byte, 8)
+	binary.LittleEndian.PutUint64(hashByteArray, hash)
+
+	if !ecdsa.Verify(&pbft.publicKeys[peerID], hashByteArray, r_firstSig, s_secondSig) {
 		return false
-	}*/
+	}
 	return true
 }
 
@@ -287,7 +292,7 @@ func (pbft *PBFT) addLogEntry(args *PrePrepareCommandArg) {
 											view: preprepareWithNoClientMessage.View,
 											clientReplySent: false,
 											prepareArgs: make(map[int]CommandArgs),
-											commitArgs: make(map[int]CommandArgs),
+											commitArgs: make(map[int]CommandArgs)
 ,										}
 }
 
@@ -398,14 +403,19 @@ func (pbft *PBFT) makeArguments(specificArgument interface{}) CommandArgs {
 		panic(err)
 	}
 
-	r, s, err1 := Sign(rand.Reader, pbft.privateKey, hash)
+	hashByteArray := make([]byte, 8)
+	binary.LittleEndian.PutUint64(hashByteArray, hash)
+
+	r, s, err1 := ecdsa.Sign(rand.Reader, &pbft.privateKey, hashByteArray)
+
+
 	if err1 != nil {
 		panic(err1)
 	}
 
 	return CommandArgs {
 			SpecificArguments: specificArgument,
-			R_firstSig: r,
-			S_secondSig: s,
+			R_firstSig: *r,
+			S_secondSig: *s,
 		}
 }
