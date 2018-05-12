@@ -1,7 +1,11 @@
 package pbft
 
 import (
-	"crypto/ecdsa"
+	"log"
+	"net"
+	"net/http"
+	"net/rpc"
+	"sync"
 	"time"
 )
 
@@ -34,7 +38,7 @@ func (pbft *PBFT) GetState() bool {
 
 // starts a new command
 // return the
-func (pbft *PBFT) Start(clientCommand Command) {
+func (pbft *PBFT) Start(clientCommand Command, reply *int) error {
 
 	pbft.serverLock.Lock()
 	defer pbft.serverLock.Unlock()
@@ -44,13 +48,13 @@ func (pbft *PBFT) Start(clientCommand Command) {
 	if pbft.serverID != leader {
 		commandArg := pbft.makeArguments(clientCommand)
 		go pbft.sendRPCs(commandArg, FORWARD_COMMAND)
-		return
+		return nil
 	}
 
 	// do nothing if the time is before what we have sent already, and update the time otherwise
 	if lastReplyTimestamp, ok := pbft.clientRegisters[clientCommand.ClientID]; ok {
 		if clientCommand.Timestamp.Before(lastReplyTimestamp) {
-			return
+			return nil
 		}
 	}
 	pbft.clientRegisters[clientCommand.ClientID] = clientCommand.Timestamp
@@ -89,15 +93,26 @@ func (pbft *PBFT) Kill() {
 //
 // Make() must return quickly, so it should start goroutines
 // for any long-running work.
+// Arguments: privateKey ecdsa.PrivateKey, publicKeys []ecdsa.PublicKey, peers []*ClientEnd, serverID int
 //
-func Make(privateKey ecdsa.PrivateKey, publicKeys []ecdsa.PublicKey, peers []*ClientEnd, serverID int,
-	persister *Persister) *PBFT {
+func (pbft *PBFT) Make(args *MakeArgs, reply *int) error {
 
-	pbft := &PBFT{}
+	persister := &Persister{mu: sync.Mutex{}}
+
+	peers := []*rpc.Client{}
+
+	for i := 0; i < len(args.IpAddrs); i++ {
+		client, err := rpc.DialHTTP("tcp", args.IpAddrs[i]+":1234")
+		if err != nil {
+			log.Fatal("dialing:", err)
+		}
+
+		peers = append(peers, client)
+	}
 
 	pbft.serverLock.Lock()
-	pbft.privateKey = privateKey
-	pbft.publicKeys = publicKeys
+	pbft.privateKey = args.PrivateKey
+	pbft.publicKeys = args.PublicKeys
 	pbft.peers = peers
 	pbft.persister = persister
 	pbft.serverID = 0
@@ -123,5 +138,19 @@ func Make(privateKey ecdsa.PrivateKey, publicKeys []ecdsa.PublicKey, peers []*Cl
 	// start a go routine for handling command
 	go pbft.runningState()
 
-	return pbft
+	return nil
+}
+
+func main() {
+	pbft := new(PBFT)
+	rpc.Register(pbft)
+
+	rpc.HandleHTTP()
+
+	l, e := net.Listen("tcp", ":1234")
+	if e != nil {
+		log.Fatal("listen error:", e)
+	}
+
+	go http.Serve(l, nil)
 }

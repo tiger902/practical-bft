@@ -71,8 +71,7 @@ type replyMsg struct {
 }
 
 type ClientEnd struct {
-	endname interface{} // this end-point's name
-	ch      chan reqMsg // copy of Network.endCh
+	ipAddr string
 }
 
 // send an RPC, wait for the reply.

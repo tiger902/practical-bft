@@ -3,6 +3,7 @@ package pbft
 import (
 	"crypto/ecdsa"
 	"math/big"
+	"net/rpc"
 	"sync"
 	"time"
 )
@@ -11,7 +12,7 @@ import (
 type PBFT struct {
 	privateKey              ecdsa.PrivateKey  //!< Private key for this server
 	publicKeys              []ecdsa.PublicKey //!< Array of publick keys for all servers
-	peers                   []*ClientEnd      //!< Array of all the other server sockets for RPC
+	peers                   []*rpc.Client     //!< Array of all the other server sockets for RPC
 	persister               *Persister        //!< Persister to be used to store data for this server in permanent storage
 	serverID                int               //!< Index into peers[] for this server
 	sequenceNumber          int               //!< last sequence number
@@ -37,6 +38,13 @@ type PBFT struct {
 
 //Dummy reply
 type RPCReply struct{}
+
+type MakeArgs struct {
+	PrivateKey ecdsa.PrivateKey
+	PublicKeys []ecdsa.PublicKey
+	IpAddrs    [numServers]string
+	ServerID   int
+}
 
 //!struct used as argument to multicast command
 type CommandArgs struct {

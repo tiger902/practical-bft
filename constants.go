@@ -12,6 +12,11 @@ const (
 	CHECK_POINT     = 7
 )
 
+//General constants
+const (
+	numServers = 4
+)
+
 const (
 	IDLE               = 0
 	PROCESSING_COMMAND = 1
