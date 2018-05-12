@@ -20,7 +20,7 @@ import (
 //   create a new PBFT server.
 // pbft.Start(command interface{}) ()
 //   start agreement on a new log entry
-// pbft.GetState() (term, isLeader)
+// pbft.GetState() (isLeader)
 //   ask a PBFT for its current term, and whether it thinks it is leader
 //
 
@@ -36,25 +36,26 @@ func (pbft *PBFT) GetState() bool {
 // return the
 func (pbft *PBFT) Start(clientCommand Command) {
 
-	// if not primary, send the request to the primary
 	pbft.serverLock.Lock()
 	defer pbft.serverLock.Unlock()
-	leader := pbft.view % len(pbft.peers)
 
+	// if not primary, send the request to the primary
+	leader := pbft.view % len(pbft.peers)
 	if pbft.serverID != leader {
 		commandArg := pbft.makeArguments(clientCommand)
-		pbft.sendRPCs(commandArg, FORWARD_COMMAND)
+		go pbft.sendRPCs(commandArg, FORWARD_COMMAND)
 		return
 	}
 
-	// do nothing if the time is before what we have sent already
+	// do nothing if the time is before what we have sent already, and update the time otherwise
 	if lastReplyTimestamp, ok := pbft.clientRegisters[clientCommand.ClientID]; ok {
 		if clientCommand.Timestamp.Before(lastReplyTimestamp) {
 			return
 		}
 	}
+	pbft.clientRegisters[clientCommand.ClientID] = clientCommand.Timestamp
 
-	// make a digest for the command from the clint
+	// make a digest for the command from the client
 	hash, err := Hash(clientCommand, nil)
 	if err != nil {
 		panic(err)
@@ -78,7 +79,6 @@ func (pbft *PBFT) Start(clientCommand Command) {
 
 	// process the recived command accordingly
 	pbft.addLogEntry(&prePrepareCommandArgs)
-	pbft.sequenceNumber++
 }
 
 // stops the server

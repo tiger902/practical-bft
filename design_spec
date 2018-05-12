@@ -25,10 +25,15 @@ Roadmap
 11. Transport layer? For the summer? I don't know!!!
 
 
-TODO:
+TODO: Later
 1. Adding and removing servers
 2. Adding the different transport layers ... this is hard and advance, so might not need
 3. Adding crypography for the message
+4. Resend RPCs on network failure
+
+TODO: now 
+- make sure the hash works as needed for both structs and interfaces
+- 
 
 Changes to the protocol
 - if it does not match, get state from the leader what if the leader is malicious?
@@ -40,6 +45,20 @@ Evaluation
 - how does performance change with the increase in the number of clients
 - what is the latency for the read and write when we change certain parameters
 
+
+Our own changes
+- We do not have the maximum and the high and low marks
+- No seperation between the network and tranport layers
+- 
+
+Design choices
+- RSA and public crypo
+- no resending of packets using RPCs
+
+
+Borrowed code
+- hashing, used the unint64 package from git
+- persistent stuff
 
 
 Make sure

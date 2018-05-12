@@ -1,25 +1,24 @@
 package pbft
 
 import (
-	"time"
-	"errors"
-	"crypto/rand"
+	"bytes"
 	"crypto/ecdsa"
-	"math/big"
+	"crypto/rand"
+	"encoding/binary"
+	"encoding/gob"
+	"errors"
 	"log"
 	"math"
-	"encoding/binary"
-	"bytes"
-	"encoding/gob"
+	"math/big"
+	"time"
 )
-
 
 // helper to check if in viewchange
 func (pbft *PBFT) isChangingView() bool {
 
 	pbft.serverStateLock.Unlock()
 	defer pbft.serverStateLock.Unlock()
-	if (pbft.state == CHANGING_VIEW) {
+	if pbft.state == CHANGING_VIEW {
 		return true
 
 	}
@@ -37,7 +36,7 @@ func (pbft *PBFT) changeState(newState int) {
 // Processes commands in a loop as they come from commandsChannel
 func (pbft *PBFT) runningState() {
 
-	const T = 150	//TODO: this need to be changed
+	const T = 150 //TODO: this need to be changed
 	timer := &time.Timer{}
 
 	pbft.state = IDLE
@@ -49,18 +48,18 @@ func (pbft *PBFT) runningState() {
 			if !timer.Stop() {
 				<-timer.C
 			}
-			if (pbft.state == PROCESSING_COMMAND) {
+			if pbft.state == PROCESSING_COMMAND {
 				pbft.serverStateLock.Lock()
 				pbft.state = CHANGING_VIEW
 				pbft.serverStateLock.Unlock()
 				pbft.startViewChange()
 			}
 
-		// increment the number of commands we are waiting for and 
+		// increment the number of commands we are waiting for and
 		// reset the timer if we are in the IDLE state
 		case <-pbft.newValidCommad:
 			pbft.uncommittedCommands++
-			if (pbft.state == IDLE) {
+			if pbft.state == IDLE {
 				pbft.serverStateLock.Lock()
 				pbft.state = PROCESSING_COMMAND
 				pbft.serverStateLock.Unlock()
@@ -70,26 +69,26 @@ func (pbft *PBFT) runningState() {
 				timer.Reset(time.Millisecond * time.Duration(T))
 			}
 
-		case <- pbft.commandRecieved:
+		case <-pbft.commandRecieved:
 			if !timer.Stop() {
 				<-timer.C
 			}
 			timer.Reset(time.Millisecond * time.Duration(T))
 
-		// decrement the number of commands we are waiting for and 
+		// decrement the number of commands we are waiting for and
 		// stop the timer if there is no more commands to run, otherwise restart
 		// the timer
 		case <-pbft.commandExecuted:
 			pbft.uncommittedCommands--
-			if (pbft.uncommittedCommands < 0) {
+			if pbft.uncommittedCommands < 0 {
 				panic(errors.New("uncommittedCommands is 0"))
 			}
-			if (pbft.state == PROCESSING_COMMAND) {
+			if pbft.state == PROCESSING_COMMAND {
 				if !timer.Stop() {
 					<-timer.C
 				}
-				
-				if (pbft.uncommittedCommands == 0) {
+
+				if pbft.uncommittedCommands == 0 {
 					pbft.serverStateLock.Lock()
 					pbft.state = IDLE
 					pbft.serverStateLock.Unlock()
@@ -101,7 +100,7 @@ func (pbft *PBFT) runningState() {
 		case uncommittedCount := <-pbft.viewChangeComplete:
 			pbft.uncommittedCommands = uncommittedCount
 			pbft.serverStateLock.Lock()
-			if (pbft.uncommittedCommands == 0) {
+			if pbft.uncommittedCommands == 0 {
 				pbft.state = IDLE
 			} else {
 				pbft.state = PROCESSING_COMMAND
@@ -115,7 +114,7 @@ func (pbft *PBFT) runningState() {
 // helper function to calcule the majority
 func (pbft *PBFT) calculateMajority() int {
 
-	f := (len(pbft.peers) - 1) /3
+	f := (len(pbft.peers) - 1) / 3
 	return (2*f + 1)
 }
 
@@ -129,30 +128,28 @@ func (pbft *PBFT) makeViewChangeArguments() CommandArgs {
 
 	for sequenceNumber, logEntry := range pbft.serverLog {
 
-
 		prepared := (len(logEntry.prepareArgs) == pbft.calculateMajority())
 		committed := (len(logEntry.commitArgs) == pbft.calculateMajority())
 
-		if (prepared && !committed)  {
+		if prepared && !committed {
 
-			prepareMForViewChange := PrepareMForViewChange {
-				PreprepareMessage:  logEntry.preprepare.PreprepareNoClientMessage,			
-				PrepareMessages:    logEntry.prepareArgs,
+			prepareMForViewChange := PrepareMForViewChange{
+				PreprepareMessage: logEntry.preprepare.PreprepareNoClientMessage,
+				PrepareMessages:   logEntry.prepareArgs,
 			}
 			prepareForViewChange[sequenceNumber] = prepareMForViewChange
 		}
 	}
 
-	viewChange := ViewChange {
-			NextView: pbft.view + 1,
-			LastCheckPointSequenceNumber: pbft.lastCheckPointSeqNumber,
-			LastCheckPointMessages: pbft.checkPoints[pbft.lastCheckPointSeqNumber].ConfirmedServers,
-			PreparedMessages: prepareForViewChange,
-			SenderID: pbft.serverID,
-		}
+	viewChange := ViewChange{
+		NextView:                     pbft.view + 1,
+		LastCheckPointSequenceNumber: pbft.lastCheckPointSeqNumber,
+		LastCheckPointMessages:       pbft.checkPoints[pbft.lastCheckPointSeqNumber].ConfirmedServers,
+		PreparedMessages:             prepareForViewChange,
+		SenderID:                     pbft.serverID,
+	}
 	return pbft.makeArguments(viewChange)
 }
-
 
 // reply to the client
 //TODO: look into how reply to client is going to work
@@ -186,37 +183,36 @@ func (pbft *PBFT) makeCheckpoint(checkPointInfo CheckPointInfo) {
 	if err != nil {
 		panic(err)
 	}
-	
-	checkPointArgs := CheckPointArgs {
-		SequenceNumber : checkPointInfo.LargestSequenceNumber,
-		Digest : hash,
-		SenderIndex : pbft.serverID,
+
+	checkPointArgs := CheckPointArgs{
+		SequenceNumber: checkPointInfo.LargestSequenceNumber,
+		Digest:         hash,
+		SenderIndex:    pbft.serverID,
 	}
 
 	pbft.sendRPCs(pbft.makeArguments(checkPointArgs), CHECK_POINT)
 
 }
 
-
 // General function send RPCs to everyone
 func (pbft *PBFT) sendRPCs(command CommandArgs, phase int) {
 
-	var rpcHandlerName string
 	pbft.serverLock.Lock()
+
 	newLeader := (pbft.view + 1) % len(pbft.peers)
 	leader := pbft.view % len(pbft.peers)
 	serverCount := len(pbft.peers)
+
 	pbft.serverLock.Unlock()
-	
+
+	var rpcHandlerName string
+
 	switch phase {
 
 	//Use RPC to the leader if command was sent to a non-leader
 	case FORWARD_COMMAND:
 		rpcHandlerName = "PBFT.ReceiveForwardedCommand"
-		ok := pbft.peers[leader].Call(rpcHandlerName, command)
-		if !ok {
-			ok = pbft.peers[leader].Call(rpcHandlerName, command)
-		}
+		pbft.peers[leader].Go(rpcHandlerName, command, nil /*reply*/, nil /*done channel*/)
 		return
 
 	//Use RPC to send preprepare messages to everyone
@@ -232,10 +228,7 @@ func (pbft *PBFT) sendRPCs(command CommandArgs, phase int) {
 
 	case VIEW_CHANGE:
 		rpcHandlerName = "PBFT.HandleViewChangeRPC"
-		ok := pbft.peers[newLeader].Call(rpcHandlerName, command)
-		if !ok {
-			ok = pbft.peers[newLeader].Call(rpcHandlerName, command)
-		}
+		pbft.peers[newLeader].Go(rpcHandlerName, command, nil /*reply*/, nil /*done channel*/)
 		return
 
 	case NEW_VIEW:
@@ -244,19 +237,15 @@ func (pbft *PBFT) sendRPCs(command CommandArgs, phase int) {
 	case CHECK_POINT:
 		rpcHandlerName = "PBFT.HandleCheckPointRPC"
 
-	case REPLY_TO_CLIENT:
-		return
+	default:
+		log.Fatal("[sendRPCs] phase not found")
 	}
 
 	for server := 0; server < serverCount; server++ {
 		if server != pbft.serverID {
-			ok := pbft.peers[server].Call(rpcHandlerName, command)
-
-			if !ok {
-				pbft.peers[server].Call(rpcHandlerName, command)
-			}
+			pbft.peers[server].Go(rpcHandlerName, command, nil /*reply*/, nil /*done channel*/)
 		}
-	}	
+	}
 
 }
 
@@ -267,24 +256,20 @@ func verifyDigests(arg interface{}, digest uint64) bool {
 	if errDigest != nil {
 		panic(errDigest)
 	}
-	if (messageDigest != digest) {
+	if messageDigest != digest {
 		return false
 	}
 
 	return true
 }
 
-
-// helper function for checking that the Digest match
+// helper function for verifying the signatures of the commands
 func (pbft *PBFT) verifySignatures(args *verifySignatureArg, r_firstSig *big.Int, s_secondSig *big.Int, peerID int) bool {
 
-	// hash the received command so that we can use the hash for verification of the signatures 
 	hash, err := Hash(args, nil)
 	if err != nil {
 		panic(err)
 	}
-
-	// check that the signature of the prepare command match
 
 	hashByteArray := make([]byte, 8)
 	binary.LittleEndian.PutUint64(hashByteArray, hash)
@@ -296,7 +281,8 @@ func (pbft *PBFT) verifySignatures(args *verifySignatureArg, r_firstSig *big.Int
 }
 
 // helper function to add a command to the log
-func (pbft *PBFT) addLogEntry(args *PrePrepareCommandArg) {
+// the function calling this should have a lock
+func (pbft *PBFT) addLogEntry(args *PrePrepareCommandArg) bool {
 
 	// TODO: check the range of the sequence numbers
 
@@ -306,34 +292,39 @@ func (pbft *PBFT) addLogEntry(args *PrePrepareCommandArg) {
 		log.Fatal("[addLogEntry] preprepare command args failed")
 	}
 
-	majority := pbft.calculateMajority()
+	// do not accept messages in a different view
+	if bft.view != preprepareWithNoClientMessage.View {
+		return false
+	}
 
 	// check if view and sequence number have not been seen. Reply to the client if the entry has been
 	// processed already. If it has not been processed and the entry at the same sequence number and view
 	// does not match the given entry, drop the packet
 	if logEntryItem, ok1 := pbft.serverLog[preprepareWithNoClientMessage.SequenceNumber]; ok1 {
-		
+
 		// if a request has been processed already, just reply to the client
-		if (len(logEntryItem.commitArgs) == majority){
-			//go pbft.replyToClient()
-			// TODO: make this
-			return
+		if len(logEntryItem.commitArgs) >= pbft.calculateMajority() {
+			go pbft.replyToClient()
+			return false
 		}
 
-		if (logEntryItem.view == preprepareWithNoClientMessage.View) {
-			return
+		if logEntryItem.view == preprepareWithNoClientMessage.View {
+			return false
 		}
 	}
 
 	// if not preInPrepareLog add to the log
-	pbft.serverLog[preprepareWithNoClientMessage.SequenceNumber] = logEntry {
-											message: args.Message,
-											commandDigest: preprepareWithNoClientMessage.Digest,
-											view: preprepareWithNoClientMessage.View,
-											clientReplySent: false,
-											prepareArgs: make(map[int]CommandArgs),
-											commitArgs: make(map[int]CommandArgs)
-,										}
+	pbft.serverLog[preprepareWithNoClientMessage.SequenceNumber] = logEntry{
+		message:         args.Message,
+		commandDigest:   preprepareWithNoClientMessage.Digest,
+		view:            preprepareWithNoClientMessage.View,
+		clientReplySent: false,
+		prepareArgs:     make(map[int]CommandArgs),
+		commitArgs:      make(map[int]CommandArgs),
+	}
+	pbft.sequenceNumber++
+
+	return true
 }
 
 // helper function to remove checkpoints that are no longer important to us
@@ -341,7 +332,7 @@ func (pbft *PBFT) addLogEntry(args *PrePrepareCommandArg) {
 func (pbft *PBFT) removeStallCheckpoints(largestStableSequenceNumber int) {
 
 	checkPoints := make(map[int]CheckPointInfo)
-	for sequenceNumber,_  := range pbft.checkPoints {
+	for sequenceNumber, _ := range pbft.checkPoints {
 		if sequenceNumber >= pbft.lastCheckPointSeqNumber {
 			checkPoints[sequenceNumber] = pbft.checkPoints[sequenceNumber]
 		}
@@ -350,12 +341,11 @@ func (pbft *PBFT) removeStallCheckpoints(largestStableSequenceNumber int) {
 	pbft.checkPoints = checkPoints
 }
 
-
 // function calling this should have a lock
 func (pbft *PBFT) createPreprepareMessages(nextVeiw int, allPreprepareMessage *[]CommandArgs) {
 
 	// get the max and min stable sequence number in bft.viewChanges[viewChange.NextView]
-	minLatestStableCheckpoint := int(math.Inf(0)) // the minimum latest stable checkpoint
+	minLatestStableCheckpoint := int(math.Inf(0))        // the minimum latest stable checkpoint
 	maxHighestPrepareSequenceNumber := int(math.Inf(-1)) // the highest prepare message seen
 
 	for _, commandArgs := range pbft.viewChanges[nextVeiw] {
@@ -368,7 +358,7 @@ func (pbft *PBFT) createPreprepareMessages(nextVeiw int, allPreprepareMessage *[
 		if viewChange.LastCheckPointSequenceNumber < minLatestStableCheckpoint {
 			minLatestStableCheckpoint = viewChange.LastCheckPointSequenceNumber
 
-			// TODO: verify that the checkpoint is valid using the LastCheckPointMessages 
+			// TODO: verify that the checkpoint is valid using the LastCheckPointMessages
 		}
 
 		for sequenceNumber, _ := range viewChange.PreparedMessages {
@@ -376,18 +366,17 @@ func (pbft *PBFT) createPreprepareMessages(nextVeiw int, allPreprepareMessage *[
 				maxHighestPrepareSequenceNumber = sequenceNumber
 			}
 		}
-	} 
+	}
 
 	for sequenceNumber := minLatestStableCheckpoint; sequenceNumber <= maxHighestPrepareSequenceNumber; sequenceNumber++ {
 
-		foundCommand := false 	// to show whether the command has been seen or not
+		foundCommand := false // to show whether the command has been seen or not
 		var preprepareMessage CommandArgs
 		for _, commandArgs := range pbft.viewChanges[nextVeiw] {
 			viewChange, ok := commandArgs.SpecificArguments.(ViewChange)
 			if !ok {
 				log.Fatal("[createPreprepareMessages] preprepare command args failed")
 			}
-
 
 			prepareMForViewChange, ok := viewChange.PreparedMessages[sequenceNumber]
 			if ok {
@@ -399,11 +388,11 @@ func (pbft *PBFT) createPreprepareMessages(nextVeiw int, allPreprepareMessage *[
 
 		var preprepareWithNoClientMessage PreprepareWithNoClientMessage
 		if !foundCommand {
-			preprepareWithNoClientMessage = PreprepareWithNoClientMessage {
-											View: nextVeiw,
-											SequenceNumber: sequenceNumber,
-											Digest: nil,
-										}
+			preprepareWithNoClientMessage = PreprepareWithNoClientMessage{
+				View:           nextVeiw,
+				SequenceNumber: sequenceNumber,
+				Digest:         nil,
+			}
 		} else {
 			var ok bool
 			preprepareWithNoClientMessage, ok = preprepareMessage.SpecificArguments.(PreprepareWithNoClientMessage)
@@ -416,7 +405,7 @@ func (pbft *PBFT) createPreprepareMessages(nextVeiw int, allPreprepareMessage *[
 
 		preprepareMessageToSend := pbft.makeArguments(preprepareWithNoClientMessage)
 		*allPreprepareMessage = append(*allPreprepareMessage, preprepareMessageToSend)
-	} 
+	}
 
 }
 
@@ -424,7 +413,6 @@ func (pbft *PBFT) createPreprepareMessages(nextVeiw int, allPreprepareMessage *[
 func (pbft *PBFT) ReceiveForwardedCommand(command CommandArgs) {
 	pbft.Start(command.SpecificArguments.(Command))
 }
-
 
 // Write the relavant state of PBFT to persistent storage
 func (pbft *PBFT) persist() {
@@ -475,8 +463,8 @@ func (pbft *PBFT) readPersist(data []byte) {
 
 }
 
+// func: makes a digital signature of the given arguments
 func (pbft *PBFT) makeArguments(specificArgument interface{}) CommandArgs {
-	// make the hash to be used for making the signatures, and then sign the message
 	hash, err := Hash(specificArgument, nil)
 	if err != nil {
 		panic(err)
@@ -487,14 +475,13 @@ func (pbft *PBFT) makeArguments(specificArgument interface{}) CommandArgs {
 
 	r, s, err1 := ecdsa.Sign(rand.Reader, &pbft.privateKey, hashByteArray)
 
-
 	if err1 != nil {
 		panic(err1)
 	}
 
-	return CommandArgs {
-			SpecificArguments: specificArgument,
-			R_firstSig: *r,
-			S_secondSig: *s,
-		}
+	return CommandArgs{
+		SpecificArguments: specificArgument,
+		R_firstSig:        *r,
+		S_secondSig:       *s,
+	}
 }
