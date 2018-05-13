@@ -15,7 +15,7 @@ import (
 var servers = [...]string{"18.232.86.210", "54.164.151.89", "52.207.222.204", "52.91.154.255"}
 
 type Client struct {
-	resultChannel chan Duration
+	resultChannel chan int64
 }
 
 func (c *Client) ReceiveReply(args CommandReply, reply *RPCReply) {
@@ -48,7 +48,7 @@ func (c *Client) callCommand(server string) {
  * Bootstraps the response servers by calling the make function and giving them the private and public keys
  *
  */
-func main() {
+func Bootstrap() {
 	curve := elliptic.P256()
 
 	publicKeys := []ecdsa.PublicKey{}
@@ -87,8 +87,9 @@ func main() {
 	}
 
 	// client should make it's RPC server as well
-	client := new(Client{resultChannel: make(chan CommandReply, 100)})
-	rpc.Register(client)
+	client := Client{resultChannel: make(chan int64, 100)}
+	clnt := new(&client)
+	rpc.Register(clnt)
 
 	rpc.HandleHTTP()
 
@@ -121,7 +122,7 @@ func main() {
 			if !timer.Stop() {
 				<-timer.C
 			}
-			_, err3 := fileHandler.WriteString(commandDuration)
+			_, err3 := fileHandler.WriteString(string(commandDuration))
 			if err3 != nil {
 				log.Fatal(err3)
 			}

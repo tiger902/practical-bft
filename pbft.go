@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/rpc"
 	"time"
+	"os"
 )
 
 /*
@@ -146,15 +147,22 @@ func (pbft *PBFT) Make(args *MakeArgs, reply *int) error {
 }
 
 func main() {
-	pbft := new(PBFT)
-	rpc.Register(pbft)
 
-	rpc.HandleHTTP()
+	runType := os.Args[1]
 
-	l, e := net.Listen("tcp", ":1234")
-	if e != nil {
-		log.Fatal("listen error:", e)
+	if runType == "server" {
+		pbft := new(PBFT)
+		rpc.Register(pbft)
+
+		rpc.HandleHTTP()
+
+		l, e := net.Listen("tcp", ":1234")
+		if e != nil {
+			log.Fatal("listen error:", e)
+		}
+
+		http.Serve(l, nil)
+	} else {
+		Bootstrap()
 	}
-
-	http.Serve(l, nil)
 }
