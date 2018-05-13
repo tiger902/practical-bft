@@ -158,17 +158,21 @@ func main() {
 
 	if runType == "server" {
 		log.Print("Entering server\n")
-		pbft := new(PBFT)
+		pbft := PBFT{}
 		rpc.Register(pbft)
+		log.Print("Registering server\n")
 
 		rpc.HandleHTTP()
+		log.Print("Handle HTTP\n")
 
 		l, e := net.Listen("tcp", ":1234")
 		if e != nil {
 			log.Fatal("listen error:", e)
 		}
 
+		log.Print("About to serve\n")
 		http.Serve(l, nil)
+		log.Print("Served them!\n")
 	} else {
 		log.Print("Entering client\n")
 		Bootstrap()
