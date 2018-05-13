@@ -13,17 +13,18 @@ import (
 )
 
 var servers = [...]string{"18.232.86.210", "54.164.151.89", "52.207.222.204", "52.91.154.255"}
-var resultChannel chan int64
 
-type Client int
+type Client struct {
+	resultChannel chan int64
+}
 
 func (c *Client) ReceiveReply(args CommandReply, reply *RPCReply) {
 
 	timeDifference := time.Now().Sub(args.RequestTimestamp)
-	resultChannel <- timeDifference.Nanoseconds()
+	c.resultChannel <- timeDifference.Nanoseconds()
 }
 
-func callCommand(server string) {
+func (c *Client) callCommand(server string) {
 
 	command := Command{
 		ClientAddress: "18.206.100.184",
@@ -37,9 +38,9 @@ func callCommand(server string) {
 		log.Fatal("dialing:", err)
 	}
 
-	pbft := new(PBFT)
+	//pbft := new(PBFT)
 
-	client.Go("PBFT.Start", command, pbft, nil)
+	client.Go("PBFT.Start", command, nil, nil)
 
 }
 
@@ -88,8 +89,8 @@ func Bootstrap() {
 	log.Print("Generated private keys\n")
 
 	// client should make it's RPC server as well
-	//clnt := new(Client)
-	//rpc.Register(clnt)
+	client := Client{resultChannel: make(chan int64, 1000)}
+	rpc.Register(client)
 	log.Print("Registered client\n")
 
 	rpc.HandleHTTP()
@@ -122,12 +123,14 @@ func Bootstrap() {
 
 	for {
 		select {
+
 		case <-timer.C:
+			log.Print("time went off \n")
 			if !timer.Stop() {
 				<-timer.C
 			}
 
-		case commandDuration := <-resultChannel:
+		case commandDuration := <-client.resultChannel:
 			print("got something")
 			if !timer.Stop() {
 				<-timer.C
@@ -138,7 +141,7 @@ func Bootstrap() {
 			}
 		}
 
-		callCommand(servers[0])
+		client.callCommand(servers[0])
 		log.Print("Clint sent another to servers\n")
 		timer.Reset(time.Millisecond * time.Duration(T))
 	}
