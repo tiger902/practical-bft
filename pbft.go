@@ -135,7 +135,8 @@ func (pbft *PBFT) Make(args *MakeArgs, reply *int) error {
 	pbft.serverLock.Unlock()
 
 	// start a go routine for handling command
-	go pbft.runningState()
+	// TODO: remove this later when we fix everything
+	//go pbft.runningState() we are not doing and view changes anymore
 
 	return nil
 }

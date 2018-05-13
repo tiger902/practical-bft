@@ -75,7 +75,7 @@ func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs, reply *RPCReply) error {
 	prepareCommandArg = pbft.makeArguments(prepareCommand)
 	pbft.serverLog[prepareArgs.SequenceNumber].prepareArgs[pbft.serverID] = prepareCommandArg
 	// TODO: maybe remove this save to persist
-	pbft.persist()
+	//pbft.persist()
 	return nil
 }
 
@@ -134,7 +134,7 @@ func (pbft *PBFT) HandlePrepareRPC(args CommandArgs, reply *RPCReply) error {
 	// return if already prepared
 	if len(logEntryItem.prepareArgs) > pbft.calculateMajority() {
 		// TODO: maybe remove this save to persist
-		pbft.persist()
+		//pbft.persist()
 		log.Printf("[HandlePrepareRPC] already prepared, so exiting")
 		return nil
 	}
@@ -160,7 +160,7 @@ func (pbft *PBFT) HandlePrepareRPC(args CommandArgs, reply *RPCReply) error {
 		go pbft.sendRPCs(commitArg, COMMIT)
 	}
 	// TODO: maybe remove this save to persist
-	pbft.persist()
+	//pbft.persist()
 
 	return nil
 }
@@ -229,7 +229,7 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs, reply *RPCReply) error {
 	// do nothing if the reply has been sent already
 	if logEntryItem.clientReplySent {
 		// TODO: maybe remove this save to persist
-		pbft.persist()
+		//pbft.persist()
 
 		log.Print("[HandleCommitRPC] reply to client has already been sent")
 		return nil
@@ -271,7 +271,7 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs, reply *RPCReply) error {
 	}
 
 	// TODO: maybe remove this for to performance
-	pbft.persist()
+	//pbft.persist()
 
 	return nil
 }
