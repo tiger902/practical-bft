@@ -13,18 +13,17 @@ import (
 )
 
 var servers = [...]string{"18.232.86.210", "54.164.151.89", "52.207.222.204", "52.91.154.255"}
+var resultChannel chan int64
 
-type Client struct {
-	resultChannel chan int64
-}
+type Client int
 
 func (c *Client) ReceiveReply(args CommandReply, reply *RPCReply) {
 
 	timeDifference := time.Now().Sub(args.RequestTimestamp)
-	c.resultChannel <- timeDifference.Nanoseconds()
+	resultChannel <- timeDifference.Nanoseconds()
 }
 
-func (c *Client) callCommand(server string) {
+func callCommand(server string) {
 
 	command := Command{
 		ClientAddress: "18.206.100.184",
@@ -120,7 +119,6 @@ func Bootstrap() {
 
 	log.Print("About to do the for\n")
 
-	client := Client{resultChannel: make(chan int64, 100)}
 
 	for {
 		select {
@@ -129,7 +127,7 @@ func Bootstrap() {
 				<-timer.C
 			}
 
-		case commandDuration := <-client.resultChannel:
+		case commandDuration := <-resultChannel:
 			print("got something")
 			if !timer.Stop() {
 				<-timer.C
@@ -143,7 +141,7 @@ func Bootstrap() {
 			log.Fatal("[Client.main]: a wrong input for the case")
 		}
 
-		client.callCommand(servers[0])
+		callCommand(servers[0])
 		timer.Reset(time.Millisecond * time.Duration(T))
 	}
 }
