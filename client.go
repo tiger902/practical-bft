@@ -91,13 +91,17 @@ func Bootstrap() {
 	// client should make it's RPC server as well
 	clnt := new(Client)
 	rpc.Register(clnt)
+	log.Print("Registered client")
 
 	rpc.HandleHTTP()
+	log.Print("Handled HTTP")
 
 	l, e := net.Listen("tcp", ":1234")
+	log.Print("Listened")
 	if e != nil {
 		log.Fatal("listen error:", e)
 	}
+	log.Print("Checked error")
 	go http.Serve(l, nil)
 
 	log.Print("Serving server\n")
@@ -113,7 +117,7 @@ func Bootstrap() {
 	}
 
 	defer fileHandler.Close()
-	
+
 	log.Print("About to do the for\n")
 
 	client := Client{resultChannel: make(chan int64, 100)}
