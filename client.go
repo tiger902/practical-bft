@@ -87,8 +87,7 @@ func Bootstrap() {
 	}
 
 	// client should make it's RPC server as well
-	client := Client{resultChannel: make(chan int64, 100)}
-	clnt := new(&client)
+	clnt := new(Client)
 	rpc.Register(clnt)
 
 	rpc.HandleHTTP()
@@ -111,6 +110,7 @@ func Bootstrap() {
 
 	defer fileHandler.Close()
 
+	client := Client{resultChannel: make(chan int64, 100)}
 	for {
 		select {
 		case <-timer.C:
