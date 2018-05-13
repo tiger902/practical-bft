@@ -5,6 +5,7 @@ import "log"
 //  HandlePrePrepareRPC receives and processes preprepare commands
 func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs, reply *RPCReply) error {
 
+	log.Print("Handle preprepare caled\n")
 	if pbft.isChangingView() {
 		log.Print("[HandlePrePrepareRPC] pbft.isChangingView() returned true")
 		return nil

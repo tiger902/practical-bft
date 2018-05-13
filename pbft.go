@@ -41,6 +41,7 @@ func (pbft *PBFT) GetState(args interface{}, reply *GetStateReply) error {
 // starts a new command
 // return the
 func (pbft *PBFT) Start(clientCommand Command, reply *int) error {
+	log.Printf("Start being called\n")
 
 	pbft.serverLock.Lock()
 	defer pbft.serverLock.Unlock()
