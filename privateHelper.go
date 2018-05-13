@@ -297,7 +297,7 @@ func (pbft *PBFT) addLogEntry(args *PrePrepareCommandArg) bool {
 	}
 
 	// do not accept messages in a different view
-	if bft.view != preprepareWithNoClientMessage.View {
+	if pbft.view != preprepareWithNoClientMessage.View {
 		return false
 	}
 
@@ -309,6 +309,13 @@ func (pbft *PBFT) addLogEntry(args *PrePrepareCommandArg) bool {
 		// if a request has been processed already, just reply to the client
 		if len(logEntryItem.commitArgs) >= pbft.calculateMajority() {
 			clientCommand := logEntryItem.message.(Command)
+			clientCommandReply := CommandReply{
+				CurrentView:      pbft.view,
+				RequestTimestamp: clientCommand.Timestamp,
+				ClientID:         clientCommand.ClientID,
+				ServerID:         pbft.serverID,
+			}
+
 			go pbft.replyToClient(clientCommandReply, clientCommand.ClientAddress)
 			return false
 		}
@@ -416,7 +423,7 @@ func (pbft *PBFT) createPreprepareMessages(nextVeiw int, allPreprepareMessage *[
 
 // Handles the RPC from a other servers that send start request to the leader
 func (pbft *PBFT) ReceiveForwardedCommand(command CommandArgs) {
-	pbft.Start(command.SpecificArguments.(Command))
+	pbft.Start(command.SpecificArguments.(Command), nil)
 }
 
 // Write the relavant state of PBFT to persistent storage

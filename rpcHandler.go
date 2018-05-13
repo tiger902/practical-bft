@@ -33,7 +33,7 @@ func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs, reply *RPCReply) error {
 	defer pbft.serverLock.Unlock()
 
 	// check the view
-	if bft.view != prePrepareNoClientMessages.View {
+	if pbft.view != prePrepareNoClientMessages.View {
 		log.Print("[handlePrePrepareRPC] make sure our idea of the current view is the same")
 		return nil
 	}
@@ -70,10 +70,9 @@ func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs, reply *RPCReply) error {
 
 	pbft.newValidCommad <- true
 
-	go pbft.sendRPCs(prepareCommandArgs, PREPARE)
-
-	prepareCommandArg = pbft.makeArguments(prepareCommand)
-	pbft.serverLog[prepareArgs.SequenceNumber].prepareArgs[pbft.serverID] = prepareCommandArg
+	prepareCommandArg := pbft.makeArguments(prepareCommand)
+	go pbft.sendRPCs(prepareCommandArg, PREPARE)
+	pbft.serverLog[prepareCommand.SequenceNumber].prepareArgs[pbft.serverID] = prepareCommandArg
 	// TODO: maybe remove this save to persist
 	//pbft.persist()
 	return nil
@@ -237,7 +236,7 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs, reply *RPCReply) error {
 
 	// go into the commit phase for this command after 2F + 1 replies +
 
-	if len(logEntryItem.commitArgs) == majority {
+	if len(logEntryItem.commitArgs) == pbft.calculateMajority() {
 		logEntryItem.clientReplySent = true
 		clientCommand := logEntryItem.message.(Command)
 		clientCommandReply := CommandReply{
@@ -248,7 +247,7 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs, reply *RPCReply) error {
 		}
 
 		// perform the checkpointing if this is the right moment
-		if (commitArgs.SequenceNumber / CHECK_POINT_INTERVAL) == 0 {
+		/*if (commitArgs.SequenceNumber / CHECK_POINT_INTERVAL) == 0 {
 			checkPointInfo := CheckPointInfo{
 				LargestSequenceNumber: commitArgs.SequenceNumber,
 				CheckPointState:       pbft.storedState,
@@ -258,9 +257,9 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs, reply *RPCReply) error {
 			pbft.lastCheckPointSeqNumber = commitArgs.SequenceNumber
 
 			go pbft.makeCheckpoint(checkPointInfo)
-		}
+		} */
 
-		lastReplyTimestamp: = pbft.clientRegisters[clientCommand.ClientID]
+		lastReplyTimestamp := pbft.clientRegisters[clientCommand.ClientID]
 		if clientCommand.Timestamp.After(lastReplyTimestamp) {
 			pbft.clientRegisters[clientCommand.ClientID] = clientCommand.Timestamp
 		}
