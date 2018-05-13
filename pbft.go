@@ -82,6 +82,8 @@ func (pbft *PBFT) Start(clientCommand Command, reply *int) error {
 
 	// process the recived command accordingly
 	pbft.addLogEntry(&prePrepareCommandArgs)
+
+	return nil
 }
 
 // stops the server

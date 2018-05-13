@@ -403,7 +403,7 @@ func (pbft *PBFT) createPreprepareMessages(nextVeiw int, allPreprepareMessage *[
 			preprepareWithNoClientMessage = PreprepareWithNoClientMessage{
 				View:           nextVeiw,
 				SequenceNumber: sequenceNumber,
-				Digest:         nil,
+				Digest:         0,
 			}
 		} else {
 			var ok bool
