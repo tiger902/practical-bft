@@ -140,7 +140,7 @@ func (pbft *PBFT) Make(args *MakeArgs, reply *int) error {
 
 	// start a go routine for handling command
 	// TODO: remove this later when we fix everything
-	//go pbft.runningState() we are not doing and view changes anymore
+	//go pbft.runningState()
 
 	return nil
 }
@@ -156,5 +156,5 @@ func main() {
 		log.Fatal("listen error:", e)
 	}
 
-	go http.Serve(l, nil)
+	http.Serve(l, nil)
 }
