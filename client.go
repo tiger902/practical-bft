@@ -136,9 +136,6 @@ func Bootstrap() {
 			if err3 != nil {
 				log.Fatal(err3)
 			}
-
-		default:
-			log.Fatal("[Client.main]: a wrong input for the case")
 		}
 
 		callCommand(servers[0])
