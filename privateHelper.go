@@ -422,8 +422,10 @@ func (pbft *PBFT) createPreprepareMessages(nextVeiw int, allPreprepareMessage *[
 }
 
 // Handles the RPC from a other servers that send start request to the leader
-func (pbft *PBFT) ReceiveForwardedCommand(command CommandArgs, reply *interface{}) {
+func (pbft *PBFT) ReceiveForwardedCommand(command CommandArgs, reply *interface{}) error {
 	pbft.Start(command.SpecificArguments.(Command), nil)
+
+	return nil
 }
 
 // Write the relavant state of PBFT to persistent storage

@@ -28,11 +28,13 @@ import (
 //
 
 //! returns whether this server believes it is the leader.
-func (pbft *PBFT) GetState(args interface{}, reply *GetStateReply) {
+func (pbft *PBFT) GetState(args interface{}, reply *GetStateReply) error {
 
 	pbft.serverLock.Lock()
 	defer pbft.serverLock.Unlock()
 	reply.isLeader = (pbft.view%len(pbft.peers) == pbft.serverID)
+
+	return nil
 }
 
 // starts a new command
