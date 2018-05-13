@@ -5,13 +5,24 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"log"
+	"net"
+	"net/http"
 	"net/rpc"
+	"os"
 	"time"
 )
 
 var servers = [...]string{"18.232.86.210", "54.164.151.89", "52.207.222.204", "52.91.154.255"}
 
-type Client struct{}
+type Client struct {
+	resultChannel chan Duration
+}
+
+func (c *Client) ReceiveReply(args CommandReply, reply *RPCReply) {
+
+	timeDifference := time.Now().Sub(args.RequestTimestamp)
+	c.resultChannel <- timeDifference.Nanoseconds()
+}
 
 func (c *Client) callCommand(server string) {
 
@@ -37,7 +48,7 @@ func (c *Client) callCommand(server string) {
  * Bootstraps the response servers by calling the make function and giving them the private and public keys
  *
  */
-func Bootstrap() {
+func main() {
 	curve := elliptic.P256()
 
 	publicKeys := []ecdsa.PublicKey{}
@@ -75,4 +86,51 @@ func Bootstrap() {
 
 	}
 
+	// client should make it's RPC server as well
+	client := new(Client{resultChannel: make(chan CommandReply, 100)})
+	rpc.Register(client)
+
+	rpc.HandleHTTP()
+
+	l, e := net.Listen("tcp", ":1234")
+	if e != nil {
+		log.Fatal("listen error:", e)
+	}
+	go http.Serve(l, nil)
+
+	// the first command to the servers
+	const T = 1000
+	timer := &time.Timer{}
+	timer.Reset(time.Millisecond * time.Duration(T))
+
+	fileHandler, err1 := os.OpenFile("pbft_latency_results", os.O_APPEND|os.O_WRONLY, 0644)
+	if err1 != nil {
+		log.Fatal(err1)
+	}
+
+	defer fileHandler.Close()
+
+	for {
+		select {
+		case <-timer.C:
+			if !timer.Stop() {
+				<-timer.C
+			}
+
+		case commandDuration := <-client.resultChannel:
+			if !timer.Stop() {
+				<-timer.C
+			}
+			_, err3 := fileHandler.WriteString(commandDuration)
+			if err3 != nil {
+				log.Fatal(err3)
+			}
+
+		default:
+			log.Fatal("[Client.main]: a wrong input for the case")
+		}
+
+		client.callCommand(servers[0])
+		timer.Reset(time.Millisecond * time.Duration(T))
+	}
 }
