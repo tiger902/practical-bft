@@ -139,6 +139,7 @@ func Bootstrap() {
 		}
 
 		callCommand(servers[0])
+		log.Print("Clint sent another to servers\n")
 		timer.Reset(time.Millisecond * time.Duration(T))
 	}
 }
