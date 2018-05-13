@@ -158,7 +158,7 @@ func main() {
 
 	if runType == "server" {
 		log.Print("Entering server\n")
-		pbft := PBFT{}
+		pbft := &PBFT{}
 		rpc.Register(pbft)
 		log.Print("Registering server\n")
 
