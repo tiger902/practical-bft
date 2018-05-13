@@ -67,6 +67,7 @@ func Bootstrap() {
 		privateKeys = append(privateKeys, *privateKey)
 
 	}
+	log.Print("Generated public keys\n")
 
 	//Now that the keys are generated, send them to the servers
 	for i := 0; i < len(servers); i++ {
@@ -85,6 +86,7 @@ func Bootstrap() {
 		client.Call("PBFT.Make", args, nil)
 
 	}
+	log.Print("Generated private keys\n")
 
 	// client should make it's RPC server as well
 	client := Client{resultChannel: make(chan int64, 100)}
@@ -99,6 +101,8 @@ func Bootstrap() {
 	}
 	go http.Serve(l, nil)
 
+	log.Print("Serving server\n")
+
 	// the first command to the servers
 	const T = 1000
 	timer := &time.Timer{}
@@ -111,6 +115,8 @@ func Bootstrap() {
 
 	defer fileHandler.Close()
 
+	log.Print("About to do the for\n")
+
 	for {
 		select {
 		case <-timer.C:
@@ -119,6 +125,7 @@ func Bootstrap() {
 			}
 
 		case commandDuration := <-client.resultChannel:
+			print("got something")
 			if !timer.Stop() {
 				<-timer.C
 			}

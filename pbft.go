@@ -149,8 +149,10 @@ func (pbft *PBFT) Make(args *MakeArgs, reply *int) error {
 func main() {
 
 	runType := os.Args[1]
+	log.Print("Entering main function\n")
 
 	if runType == "server" {
+		log.Print("Entering server\n")
 		pbft := new(PBFT)
 		rpc.Register(pbft)
 
@@ -163,6 +165,7 @@ func main() {
 
 		http.Serve(l, nil)
 	} else {
+		log.Print("Entering client\n")
 		Bootstrap()
 	}
 }
