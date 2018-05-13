@@ -126,23 +126,26 @@ func Bootstrap() {
 
 		case <-timer.C:
 			log.Print("time went off \n")
-			if !timer.Stop() {
+			/*if !timer.Stop() {
 				<-timer.C
-			}
+			}*/
+			timer.Reset(time.Millisecond * time.Duration(T))
 
 		case commandDuration := <-client.resultChannel:
 			print("got something")
-			if !timer.Stop() {
+			/*if !timer.Stop() {
 				<-timer.C
-			}
+			}*/
 			_, err3 := fileHandler.WriteString(string(commandDuration))
 			if err3 != nil {
 				log.Fatal(err3)
 			}
+
+			//timer.Reset(time.Millisecond * time.Duration(T))
 		}
 
 		client.callCommand(servers[0])
 		log.Print("Clint sent another to servers\n")
-		timer.Reset(time.Millisecond * time.Duration(T))
+		//timer.Reset(time.Millisecond * time.Duration(T))
 	}
 }
