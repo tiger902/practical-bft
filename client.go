@@ -13,6 +13,7 @@ import (
 )
 
 var servers = [...]string{"18.232.86.210", "54.164.151.89", "52.207.222.204", "52.91.154.255"}
+var serverClient []*rpc.Client
 
 type Client struct {
 	resultChannel chan int64
@@ -24,7 +25,7 @@ func (c *Client) ReceiveReply(args CommandReply, reply *RPCReply) {
 	c.resultChannel <- timeDifference.Nanoseconds()
 }
 
-func (c *Client) callCommand(server string) {
+func (c *Client) callCommand(server int) {
 
 	command := Command{
 		ClientAddress: "18.206.100.184",
@@ -33,14 +34,14 @@ func (c *Client) callCommand(server string) {
 		ClientID:      0,
 	}
 
-	client, err := rpc.DialHTTP("tcp", server+":1234")
+	/*client, err := rpc.DialHTTP("tcp", server+":1234")
 	if err != nil {
 		log.Fatal("dialing:", err)
-	}
+	}*/
 
 	//pbft := new(PBFT)
 
-	client.Go("PBFT.Start", command, nil, nil)
+	serverClient[server].Go("PBFT.Start", command, nil, nil)
 
 }
 
@@ -82,6 +83,8 @@ func Bootstrap() {
 		if err != nil {
 			log.Fatal("dialing:", err)
 		}
+
+		serverClient = append(serverClient, client)
 
 		client.Call("PBFT.Make", args, nil)
 
@@ -144,7 +147,7 @@ func Bootstrap() {
 			//timer.Reset(time.Millisecond * time.Duration(T))
 		}
 
-		client.callCommand(servers[0])
+		client.callCommand(0)
 		log.Print("Clint sent another to servers\n")
 		//timer.Reset(time.Millisecond * time.Duration(T))
 	}
