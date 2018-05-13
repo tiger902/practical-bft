@@ -30,5 +30,5 @@ type Command struct {
 }
 
 type GetStateReply struct {
-	isLeader: bool
+	isLeader bool
 }
