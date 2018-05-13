@@ -100,6 +100,7 @@ func (pbft *PBFT) Start(clientCommand Command, reply *int) error {
 // Arguments: privateKey ecdsa.PrivateKey, publicKeys []ecdsa.PublicKey, peers []*ClientEnd, serverID int
 //
 func (pbft *PBFT) Make(args *MakeArgs, reply *int) error {
+	log.Print("Make being called!\n")
 
 	//persister := &Persister{mu: sync.Mutex{}}
 
