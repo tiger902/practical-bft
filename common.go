@@ -28,3 +28,7 @@ type Command struct {
 	Timestamp     time.Time   //!< timestamp for the operation
 	ClientID      int         //!< ID of the client
 }
+
+type GetStateReply struct {
+	isLeader: bool
+}
