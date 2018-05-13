@@ -152,7 +152,7 @@ func main() {
 	runType := os.Args[1]
 
 	fmt.Println(runType)
-	fmt.Println(os.Args[5])
+	//fmt.Println(os.Args[5])
 
 	if runType == "server" {
 		pbft := new(PBFT)
