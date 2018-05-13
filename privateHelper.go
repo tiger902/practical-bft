@@ -431,7 +431,7 @@ func (pbft *PBFT) ReceiveForwardedCommand(command CommandArgs) {
 func (pbft *PBFT) persist() {
 
 	// TODO: maybe copy this and then save it from that copy so that we do not stall the protocol
-	w := new(bytes.Buffer)
+	/*w := new(bytes.Buffer)
 	e := gob.NewEncoder(w)
 
 	e.Encode(pbft.sequenceNumber)
@@ -443,8 +443,7 @@ func (pbft *PBFT) persist() {
 
 	data := w.Bytes()
 
-	//TODO: uncomment this
-	//pbft.persister.SavePBFTState(data)
+	pbft.persister.SavePBFTState(data)*/
 }
 
 //! Restore previously persisted state.
