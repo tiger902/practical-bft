@@ -443,7 +443,8 @@ func (pbft *PBFT) persist() {
 
 	data := w.Bytes()
 
-	pbft.persister.SavePBFTState(data)
+	//TODO: uncomment this
+	//pbft.persister.SavePBFTState(data)
 }
 
 //! Restore previously persisted state.

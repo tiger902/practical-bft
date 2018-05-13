@@ -132,7 +132,8 @@ func (pbft *PBFT) Make(args *MakeArgs, reply *int) error {
 	pbft.commandRecieved = make(chan bool, 10)
 	pbft.viewChangeComplete = make(chan int, 10)
 
-	pbft.readPersist(persister.ReadPBFTState())
+	// TODO: uncomment this
+	//pbft.readPersist(persister.ReadPBFTState())
 	pbft.serverLock.Unlock()
 
 	// start a go routine for handling command
