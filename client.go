@@ -88,8 +88,8 @@ func Bootstrap() {
 	log.Print("Generated private keys\n")
 
 	// client should make it's RPC server as well
-	clnt := new(Client)
-	rpc.Register(clnt)
+	//clnt := new(Client)
+	//rpc.Register(clnt)
 	log.Print("Registered client\n")
 
 	rpc.HandleHTTP()
