@@ -89,8 +89,7 @@ func Bootstrap() {
 	log.Print("Generated private keys\n")
 
 	// client should make it's RPC server as well
-	client := Client{resultChannel: make(chan int64, 100)}
-	clnt := new(&client)
+	clnt := new(Client)
 	rpc.Register(clnt)
 
 	rpc.HandleHTTP()
@@ -114,8 +113,10 @@ func Bootstrap() {
 	}
 
 	defer fileHandler.Close()
-
+	
 	log.Print("About to do the for\n")
+
+	client := Client{resultChannel: make(chan int64, 100)}
 
 	for {
 		select {

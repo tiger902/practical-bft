@@ -5,8 +5,8 @@ import (
 	"net"
 	"net/http"
 	"net/rpc"
-	"time"
 	"os"
+	"time"
 )
 
 /*
@@ -150,6 +150,9 @@ func main() {
 
 	runType := os.Args[1]
 	log.Print("Entering main function\n")
+
+	//fmt.Println(runType)
+	//fmt.Println(os.Args[5])
 
 	if runType == "server" {
 		log.Print("Entering server\n")
