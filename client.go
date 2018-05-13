@@ -90,17 +90,17 @@ func Bootstrap() {
 	// client should make it's RPC server as well
 	clnt := new(Client)
 	rpc.Register(clnt)
-	log.Print("Registered client")
+	log.Print("Registered client\n")
 
 	rpc.HandleHTTP()
-	log.Print("Handled HTTP")
+	log.Print("Handled HTTP\n")
 
 	l, e := net.Listen("tcp", ":1234")
-	log.Print("Listened")
+	log.Print("Listened\n")
 	if e != nil {
 		log.Fatal("listen error:", e)
 	}
-	log.Print("Checked error")
+	log.Print("Checked error\n")
 	go http.Serve(l, nil)
 
 	log.Print("Serving server\n")
