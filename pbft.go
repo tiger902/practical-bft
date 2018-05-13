@@ -1,12 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"net/rpc"
-	"time"
 	"os"
+	"time"
 )
 
 /*
@@ -149,6 +150,9 @@ func (pbft *PBFT) Make(args *MakeArgs, reply *int) error {
 func main() {
 
 	runType := os.Args[1]
+
+	fmt.Println(runType)
+	fmt.Println(os.Args[5])
 
 	if runType == "server" {
 		pbft := new(PBFT)
