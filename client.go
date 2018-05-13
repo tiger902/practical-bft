@@ -107,7 +107,7 @@ func Bootstrap() {
 
 	// the first command to the servers
 	const T = 1000
-	timer := &time.Timer{}
+	timer := time.NewTimer(time.Millisecond * + T)
 	timer.Reset(time.Millisecond * time.Duration(T))
 
 	fileHandler, err1 := os.OpenFile("pbft_latency_results", os.O_APPEND|os.O_WRONLY, 0644)
