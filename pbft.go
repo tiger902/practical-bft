@@ -5,7 +5,6 @@ import (
 	"net"
 	"net/http"
 	"net/rpc"
-	"sync"
 	"time"
 )
 
@@ -98,7 +97,7 @@ func (pbft *PBFT) Kill() {
 //
 func (pbft *PBFT) Make(args *MakeArgs, reply *int) error {
 
-	persister := &Persister{mu: sync.Mutex{}}
+	//persister := &Persister{mu: sync.Mutex{}}
 
 	peers := []*rpc.Client{}
 
@@ -115,7 +114,7 @@ func (pbft *PBFT) Make(args *MakeArgs, reply *int) error {
 	pbft.privateKey = args.PrivateKey
 	pbft.publicKeys = args.PublicKeys
 	pbft.peers = peers
-	pbft.persister = persister
+	//pbft.persister = persister
 	pbft.serverID = 0
 	pbft.sequenceNumber = 0
 	pbft.commandsChannel = make(chan int, 10)

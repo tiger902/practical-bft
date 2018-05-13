@@ -10,15 +10,15 @@ import (
 
 //! A Go object implementing a single PBFT peer.
 type PBFT struct {
-	privateKey              ecdsa.PrivateKey  //!< Private key for this server
-	publicKeys              []ecdsa.PublicKey //!< Array of publick keys for all servers
-	peers                   []*rpc.Client     //!< Array of all the other server sockets for RPC
-	persister               *Persister        //!< Persister to be used to store data for this server in permanent storage
-	serverID                int               //!< Index into peers[] for this server
-	sequenceNumber          int               //!< last sequence number
-	commandsChannel         chan int          //!< channel for commands
-	uncommittedCommands     int               //!< store the number of commands that we are waiting for
-	state                   int               //!< the state of the server
+	privateKey ecdsa.PrivateKey  //!< Private key for this server
+	publicKeys []ecdsa.PublicKey //!< Array of publick keys for all servers
+	peers      []*rpc.Client     //!< Array of all the other server sockets for RPC
+	//persister               *Persister        //!< Persister to be used to store data for this server in permanent storage
+	serverID                int      //!< Index into peers[] for this server
+	sequenceNumber          int      //!< last sequence number
+	commandsChannel         chan int //!< channel for commands
+	uncommittedCommands     int      //!< store the number of commands that we are waiting for
+	state                   int      //!< the state of the server
 	serverStateLock         sync.Mutex
 	lastCheckPointSeqNumber int                    //!< the sequence number of the last checkpoint
 	view                    int                    //!< the current view of the system
