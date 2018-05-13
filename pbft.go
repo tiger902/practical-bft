@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -151,7 +150,7 @@ func main() {
 
 	runType := os.Args[1]
 
-	fmt.Println(runType)
+	//fmt.Println(runType)
 	//fmt.Println(os.Args[5])
 
 	if runType == "server" {
