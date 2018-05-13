@@ -1,4 +1,4 @@
-package pbft
+package main
 
 //!< Consts with the phases of the protocol
 const (

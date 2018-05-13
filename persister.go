@@ -1,14 +1,15 @@
-package pbft
+package main
 
 //
 // support for PBFT to save persistent
 //
 
-import ("sync"
-		"github.com/boltdb/bolt"
-		"log"
-)
+import (
+	"log"
+	"sync"
 
+	"github.com/boltdb/bolt"
+)
 
 type Persister struct {
 	mu        sync.Mutex

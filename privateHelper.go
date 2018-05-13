@@ -1,4 +1,4 @@
-package pbft
+package main
 
 import (
 	"bytes"

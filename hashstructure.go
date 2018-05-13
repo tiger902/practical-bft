@@ -1,14 +1,14 @@
-package pbft
+package main
 
 // This was *heavily* adapted from https://github.com/mitchellh/hashstructure/blob/master/hashstructure.go
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 	"hash"
 	"reflect"
-	"crypto/sha256"
-	"bytes"
 )
 
 // ErrNotStringer is returned when there's an error with hash:"string"

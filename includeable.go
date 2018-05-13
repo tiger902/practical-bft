@@ -1,4 +1,4 @@
-package pbft
+package main
 
 //Source: https://github.com/mitchellh/hashstructure/blob/master/include.go
 
