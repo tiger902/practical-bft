@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/ecdsa"
-	"math/big"
 	"net/rpc"
 	"sync"
 	"time"
@@ -47,8 +46,8 @@ type MakeArgs struct {
 //!struct used as argument to multicast command
 type CommandArgs struct {
 	SpecificArguments interface{}
-	R_firstSig        big.Int
-	S_secondSig       big.Int
+	R_firstSig        int
+	S_secondSig       int
 }
 
 type PreprepareWithNoClientMessage struct {

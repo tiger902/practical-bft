@@ -43,7 +43,7 @@ func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs, reply *RPCReply) error {
 	signatureArg := verifySignatureArg{
 		generic: preprepareCommandArgs,
 	}
-	if !pbft.verifySignatures(&signatureArg, &args.R_firstSig, &args.S_secondSig, pbft.view%len(pbft.peers)) {
+	if !pbft.verifySignatures(&signatureArg, args.R_firstSig, args.S_secondSig, pbft.view%len(pbft.peers)) {
 		log.Print("[handlePrePrepareRPC] verify signatures failed")
 		return nil
 	}
@@ -51,7 +51,7 @@ func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs, reply *RPCReply) error {
 	signatureArg = verifySignatureArg{
 		generic: prePrepareNoClientMessages,
 	}
-	if !pbft.verifySignatures(&signatureArg, &prePrepareNoClientMessageArgs.R_firstSig, &prePrepareNoClientMessageArgs.S_secondSig, pbft.view%len(pbft.peers)) {
+	if !pbft.verifySignatures(&signatureArg, prePrepareNoClientMessageArgs.R_firstSig, prePrepareNoClientMessageArgs.S_secondSig, pbft.view%len(pbft.peers)) {
 		log.Print("[handlePrePrepareRPC] verify signatures on prepare no client messages failed")
 		return nil
 	}
@@ -96,7 +96,7 @@ func (pbft *PBFT) HandlePrepareRPC(args CommandArgs, reply *RPCReply) error {
 	signatureArg := verifySignatureArg{
 		generic: prepareArgs,
 	}
-	if !pbft.verifySignatures(&signatureArg, &args.R_firstSig, &args.S_secondSig, prepareArgs.SenderIndex) {
+	if !pbft.verifySignatures(&signatureArg, args.R_firstSig, args.S_secondSig, prepareArgs.SenderIndex) {
 		log.Print("[HandlePrepareRPC] signatures of the prepare command args don't match")
 		return nil
 	}
@@ -185,7 +185,7 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs, reply *RPCReply) error {
 		generic: commitArgs,
 	}
 	// check that the signature of the prepare command match
-	if !pbft.verifySignatures(&signatureArg, &args.R_firstSig, &args.S_secondSig, commitArgs.SenderIndex) {
+	if !pbft.verifySignatures(&signatureArg, args.R_firstSig, args.S_secondSig, commitArgs.SenderIndex) {
 		log.Print("[HandleCommitRPC] signature of the preprepare does not match")
 		return nil
 	}
@@ -296,7 +296,7 @@ func (pbft *PBFT) HandleViewChangeRPC(args CommandArgs, reply *RPCReply) error {
 		generic: viewChange,
 	}
 	// check that the signature of the prepare command match
-	if !pbft.verifySignatures(&signatureArg, &args.R_firstSig, &args.S_secondSig, viewChange.SenderID) {
+	if !pbft.verifySignatures(&signatureArg, args.R_firstSig, args.S_secondSig, viewChange.SenderID) {
 		log.Print("[HandleViewChangeRPC] signatures of the preprepare command don't match")
 		return nil
 	}
@@ -390,7 +390,7 @@ func (pbft *PBFT) HandleNewViewRPC(args CommandArgs, reply *RPCReply) error {
 		generic: newView,
 	}
 	// check that the signature of the prepare command match
-	if !pbft.verifySignatures(&signatureArg, &args.R_firstSig, &args.S_secondSig, newLeader) {
+	if !pbft.verifySignatures(&signatureArg, args.R_firstSig, args.S_secondSig, newLeader) {
 		log.Print("[HandleNewViewRPC] signatures of preprepare command messages don't match")
 		return nil
 	}
@@ -407,7 +407,7 @@ func (pbft *PBFT) HandleNewViewRPC(args CommandArgs, reply *RPCReply) error {
 			generic: viewChangeMessage,
 		}
 
-		if !pbft.verifySignatures(&signatureArg, &viewChangeArgs.R_firstSig, &viewChangeArgs.S_secondSig, serverID) {
+		if !pbft.verifySignatures(&signatureArg, viewChangeArgs.R_firstSig, viewChangeArgs.S_secondSig, serverID) {
 			log.Print("[HandleNewViewRPC] signature not valid")
 			return nil
 		}
@@ -462,7 +462,7 @@ func (pbft *PBFT) HandleCheckPointRPC(args CommandArgs, reply *RPCReply) error {
 		generic: checkPointArgs,
 	}
 	// check that the signature of the prepare command match
-	if !pbft.verifySignatures(&signatureArg, &args.R_firstSig, &args.S_secondSig, checkPointArgs.SenderIndex) {
+	if !pbft.verifySignatures(&signatureArg, args.R_firstSig, args.S_secondSig, checkPointArgs.SenderIndex) {
 		log.Fatal("[HandleCheckPointRPC] signature not valid")
 		return nil
 	}

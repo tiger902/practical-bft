@@ -6,7 +6,6 @@ import (
 	"encoding/gob"
 	"errors"
 	"log"
-	"math/big"
 	"net/rpc"
 	"time"
 	"math"
@@ -280,7 +279,7 @@ func verifyDigests(arg interface{}, digest uint64) bool {
 }
 
 // helper function for verifying the signatures of the commands
-func (pbft *PBFT) verifySignatures(args *verifySignatureArg, r_firstSig *big.Int, s_secondSig *big.Int, peerID int) bool {
+func (pbft *PBFT) verifySignatures(args *verifySignatureArg, r_firstSig int, s_secondSig int, peerID int) bool {
 
 	return true
 	/*
@@ -510,12 +509,9 @@ func (pbft *PBFT) makeArguments(specificArgument interface{}) CommandArgs {
 		panic(err1)
 	}*/
 
-	x :=  big.NewInt(0)
-	y:= big.NewInt(0)
-
 	return CommandArgs{
 		SpecificArguments: specificArgument,
-		R_firstSig:      *x ,
-		S_secondSig:     *y,
+		R_firstSig:      0,
+		S_secondSig:     0,
 	}
 }
