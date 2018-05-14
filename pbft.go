@@ -74,7 +74,7 @@ func (pbft *PBFT) Start(clientCommand Command, reply *int) error {
 		View:           pbft.view,
 		SequenceNumber: pbft.sequenceNumber,
 		Digest:         hash,
-		Timestamp:                  time.Now(),
+		Timestamp:       clientCommand.Timestamp,
 	}
 
 	signedPreprepareNoMessage := pbft.makeArguments(prePrepareCommandArgsNoMessage)
@@ -82,7 +82,7 @@ func (pbft *PBFT) Start(clientCommand Command, reply *int) error {
 	prePrepareCommandArgs := PrePrepareCommandArg{
 		PreprepareNoClientMessage: signedPreprepareNoMessage,
 		Message:                   clientCommand,
-		Timestamp:                  time.Now(),
+		Timestamp:                  clientCommand.Timestamp,
 	}
 
 	// multicast to all the other servers

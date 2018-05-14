@@ -120,8 +120,8 @@ func Bootstrap() {
 
 	// the first command to the servers
 	const T = 1000
-	timer := time.NewTimer(time.Millisecond * + T)
-	timer.Reset(time.Millisecond * time.Duration(T))
+	//timer := time.NewTimer(time.Millisecond * + T)
+	//timer.Reset(time.Millisecond * time.Duration(T))
 
 	fileHandler, err1 := os.OpenFile("pbft_latency_results", os.O_APPEND|os.O_WRONLY, 0644)
 	if err1 != nil {
@@ -136,19 +136,19 @@ func Bootstrap() {
 	for {
 		select {
 
-		case <-timer.C:
-			log.Print("time went off \n")
+		//case <-timer.C:
+			//log.Print("time went off \n")
 			/*if !timer.Stop() {
 				<-timer.C
 			}*/
-			timer.Reset(time.Millisecond * time.Duration(T))
+			//timer.Reset(time.Millisecond * time.Duration(T))
 
 		case commandDuration := <-client.resultChannel:
 			print("got something")
 			/*if !timer.Stop() {
 				<-timer.C
 			}*/
-			byte := fmt.Sprintf("%d", commandDuration)
+			byte := fmt.Sprintf("%s\n", commandDuration)
 			_, err3 := fileHandler.WriteString(byte+ "\n")
 			if err3 != nil {
 				log.Fatal(err3)
