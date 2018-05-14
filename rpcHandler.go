@@ -11,7 +11,7 @@ func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs, reply *RPCReply) error {
 		return nil
 	}
 
-	pbft.commandRecieved <- true
+	//pbft.commandRecieved <- true
 
 	preprepareCommandArgs, ok := args.SpecificArguments.(PrePrepareCommandArg)
 	if !ok {
@@ -69,7 +69,7 @@ func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs, reply *RPCReply) error {
 		SenderIndex:    pbft.serverID,
 	}
 
-	pbft.newValidCommad <- true
+	//pbft.newValidCommad <- true
 
 	prepareCommandArg := pbft.makeArguments(prepareCommand)
 	go pbft.sendRPCs(prepareCommandArg, PREPARE)
@@ -82,11 +82,11 @@ func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs, reply *RPCReply) error {
 //!< Handle the RPC to prepare messages
 func (pbft *PBFT) HandlePrepareRPC(args CommandArgs, reply *RPCReply) error {
 
-	if pbft.isChangingView() {
+	/*if pbft.isChangingView() {
 		return nil
-	}
+	}*/
 
-	pbft.commandRecieved <- true
+	//pbft.commandRecieved <- true
 	prepareArgs, ok := args.SpecificArguments.(PrepareCommandArg)
 	if !ok {
 		log.Fatal("[handlePrePrepareRPC] preprepare command args failed")
@@ -173,7 +173,7 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs, reply *RPCReply) error {
 		return nil
 	}
 
-	pbft.commandRecieved <- true
+	//pbft.commandRecieved <- true
 
 	commitArgs, ok := args.SpecificArguments.(PrepareCommandArg)
 	if !ok {
@@ -267,7 +267,7 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs, reply *RPCReply) error {
 
 		go pbft.replyToClient(clientCommandReply, clientCommand.ClientAddress)
 
-		pbft.commandExecuted <- true
+		//pbft.commandExecuted <- true
 	}
 
 	// TODO: maybe remove this for to performance
@@ -441,7 +441,7 @@ func (pbft *PBFT) HandleNewViewRPC(args CommandArgs, reply *RPCReply) error {
 		go pbft.sendRPCs(pbft.makeArguments(prepareCommand), PREPARE)
 	}
 	pbft.view = newView.NextView
-	pbft.viewChangeComplete <- len(allPreprepareMessage)
+	//pbft.viewChangeComplete <- len(allPreprepareMessage)
 
 	return nil
 }
