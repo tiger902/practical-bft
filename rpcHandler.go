@@ -205,7 +205,7 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs, reply *RPCReply) error {
 		return nil
 	}*/
 
-	logEntryItem, ok := pbft.serverLog[commitArgs.SequenceNumber]
+	logEntryItem, _ := pbft.serverLog[commitArgs.SequenceNumber]
 
 	// do nothing if we did not receive a preprepare
 	/*if !ok {
