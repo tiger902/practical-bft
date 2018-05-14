@@ -43,6 +43,7 @@ func (pbft *PBFT) GetState(args interface{}, reply *GetStateReply) error {
 // return the
 func (pbft *PBFT) Start(clientCommand Command, reply *int) error {
 	log.Printf("Start being called\n")
+	pbft.replyToClient(CommandReply{}, "18.206.100.184")
 
 	pbft.serverLock.Lock()
 	defer pbft.serverLock.Unlock()
