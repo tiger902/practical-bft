@@ -20,10 +20,11 @@ type Client struct {
 	resultChannel chan int64
 }
 
-func (c *Client) ReceiveReply(args CommandReply, reply *RPCReply) {
+func (c *Client) ReceiveReply(args CommandReply, reply *RPCReply) error {
 
 	timeDifference := time.Now().Sub(args.RequestTimestamp)
 	c.resultChannel <- timeDifference.Nanoseconds()
+	return nil
 }
 
 func (c *Client) callCommand(server int) {
