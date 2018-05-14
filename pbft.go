@@ -7,6 +7,7 @@ import (
 	"net/rpc"
 	"os"
 	"time"
+	"encoding/gob"
 )
 
 /*
@@ -153,6 +154,19 @@ func main() {
 
 	runType := os.Args[1]
 	log.Print("Entering main function\n")
+
+	gob.Register(CommandArgs{})
+	gob.Register(MakeArgs{})
+	gob.Register(PreprepareWithNoClientMessage{})
+	gob.Register(PrePrepareCommandArg{})
+	gob.Register(PrepareCommandArg{})
+	gob.Register(CommitArg{})
+	gob.Register(CheckPointArgs{})
+	gob.Register(PrepareMForViewChange{})
+	gob.Register(ViewChange{})
+	gob.Register(NewView{})
+	gob.Register(logEntry{})
+	gob.Register(CheckPointInfo{})
 
 	//fmt.Println(runType)
 	//fmt.Println(os.Args[5])
