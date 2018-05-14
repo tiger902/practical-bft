@@ -73,7 +73,7 @@ func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs, reply *RPCReply) error {
 
 	prepareCommandArg := pbft.makeArguments(prepareCommand)
 	go pbft.sendRPCs(prepareCommandArg, PREPARE)
-	pbft.serverLog[prepareCommand.SequenceNumber].prepareArgs[pbft.serverID] = prepareCommandArg
+	//pbft.serverLog[prepareCommand.SequenceNumber].prepareArgs[pbft.serverID] = prepareCommandArg
 	// TODO: maybe remove this save to persist
 	//pbft.persist()
 	return nil
@@ -156,7 +156,7 @@ func (pbft *PBFT) HandlePrepareRPC(args CommandArgs, reply *RPCReply) error {
 		}
 
 		commitArg := pbft.makeArguments(commitArgs)
-		pbft.serverLog[prepareArgs.SequenceNumber].commitArgs[pbft.serverID] = commitArg
+		//pbft.serverLog[prepareArgs.SequenceNumber].commitArgs[pbft.serverID] = commitArg
 
 		go pbft.sendRPCs(commitArg, COMMIT)
 	}
@@ -227,7 +227,7 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs, reply *RPCReply) error {
 		log.Print("[HandlePrepareRPC] already received from this server")
 		return nil
 	}
-	pbft.serverLog[commitArgs.SequenceNumber].commitArgs[commitArgs.SenderIndex] = args
+	//pbft.serverLog[commitArgs.SequenceNumber].commitArgs[commitArgs.SenderIndex] = args
 
 	// do nothing if the reply has been sent already
 	/*if logEntryItem.clientReplySent {
