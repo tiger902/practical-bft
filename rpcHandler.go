@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"time"
 )
 
 //  HandlePrePrepareRPC receives and processes preprepare commands
@@ -70,6 +69,7 @@ func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs, reply *RPCReply) error {
 		SequenceNumber: prePrepareNoClientMessages.SequenceNumber,
 		Digest:         prePrepareNoClientMessages.Digest,
 		SenderIndex:    pbft.serverID,
+		Timestamp:      preprepareCommandArgs.Timestamp,
 	}
 
 	//pbft.newValidCommad <- true
@@ -156,6 +156,7 @@ func (pbft *PBFT) HandlePrepareRPC(args CommandArgs, reply *RPCReply) error {
 			SequenceNumber: prepareArgs.SequenceNumber,
 			Digest:         prepareArgs.Digest,
 			SenderIndex:    pbft.serverID,
+			Timestamp:      prepareArgs.Timestamp,
 		}
 
 		commitArg := pbft.makeArguments(commitArgs)
@@ -248,7 +249,7 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs, reply *RPCReply) error {
 		//clientCommand := logEntryItem.message.(Command)
 		clientCommandReply := CommandReply{
 			CurrentView:      pbft.view,
-			RequestTimestamp: time.Now(),
+			RequestTimestamp: commitArgs.Timestamp,
 			ClientID:         0,
 			ServerID:         pbft.serverID,
 		}

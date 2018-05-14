@@ -123,7 +123,7 @@ func Bootstrap() {
 	timer := time.NewTimer(time.Millisecond * + T)
 	timer.Reset(time.Millisecond * time.Duration(T))
 
-	fileHandler, err1 := os.OpenFile("pbft_latency_results_no_consensus.txt", os.O_APPEND|os.O_WRONLY, 0644)
+	fileHandler, err1 := os.OpenFile("pbft_latency_results", os.O_APPEND|os.O_WRONLY, 0644)
 	if err1 != nil {
 		log.Fatal(err1)
 	}
