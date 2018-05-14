@@ -202,8 +202,8 @@ func (pbft *PBFT) sendRPCs(command CommandArgs, phase int) {
 	fmt.Printf("RPC being called here for the command: %d\n", phase)
 	pbft.serverLock.Lock()
 
-	newLeader := (pbft.view + 1) % len(pbft.peers)
-	leader := pbft.view % len(pbft.peers)
+	/*newLeader := (pbft.view + 1) % len(pbft.peers)
+	leader := pbft.view % len(pbft.peers)*/
 	serverCount := len(pbft.peers)
 
 	pbft.serverLock.Unlock()
