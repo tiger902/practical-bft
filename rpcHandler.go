@@ -6,41 +6,41 @@ import "log"
 func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs, reply *RPCReply) error {
 
 	log.Print("Handle preprepare caled\n")
-	if pbft.isChangingView() {
+	/*if pbft.isChangingView() {
 		log.Print("[HandlePrePrepareRPC] pbft.isChangingView() returned true")
 		return nil
-	}
+	}*/
 
 	//pbft.commandRecieved <- true
 
-	preprepareCommandArgs, ok := args.SpecificArguments.(PrePrepareCommandArg)
-	if !ok {
+	preprepareCommandArgs, _ := args.SpecificArguments.(PrePrepareCommandArg)
+	/*if !ok {
 		log.Fatal("[handlePrePrepareRPC] args.SpecificArguments.(PrePrepareCommandArg) failed")
-	}
+	}*/
 
 	prePrepareNoClientMessageArgs := preprepareCommandArgs.PreprepareNoClientMessage
-	prePrepareNoClientMessages, ok1 := prePrepareNoClientMessageArgs.SpecificArguments.(PreprepareWithNoClientMessage)
-	if !ok1 {
+	prePrepareNoClientMessages, _ := prePrepareNoClientMessageArgs.SpecificArguments.(PreprepareWithNoClientMessage)
+	/*if !ok1 {
 		log.Fatal("[handlePrePrepareRPC]  prePrepareNoClientMessageArgs.SpecificArguments.(PreprepareWithNoClientMessage) failed")
-	}
+	}*/
 
 	// return of the message digest does not match with the one that will be calculated here
-	if !verifyDigests(preprepareCommandArgs.Message, prePrepareNoClientMessages.Digest) {
+	/*if !verifyDigests(preprepareCommandArgs.Message, prePrepareNoClientMessages.Digest) {
 		log.Print("[handlePrePrepareRPC] verifyDigests(preprepareCommandArgs.Message, prePrepareNoClientMessages.Digest) returned false")
 		return nil
-	}
+	}*/
 
 	pbft.serverLock.Lock()
 	defer pbft.serverLock.Unlock()
 
-	// check the view
+	/*// check the view
 	if pbft.view != prePrepareNoClientMessages.View {
 		log.Print("[handlePrePrepareRPC] make sure our idea of the current view is the same")
 		return nil
-	}
+	}*/
 
 	// verify the signature of the received commands
-	signatureArg := verifySignatureArg{
+	/*signatureArg := verifySignatureArg{
 		generic: preprepareCommandArgs,
 	}
 	if !pbft.verifySignatures(&signatureArg, args.R_firstSig, args.S_secondSig, pbft.view%len(pbft.peers)) {
@@ -59,7 +59,7 @@ func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs, reply *RPCReply) error {
 	// add entry to the log
 	if !pbft.addLogEntry(&preprepareCommandArgs) {
 		return nil
-	}
+	}*/
 
 	// broadcast prepare messages to everyone if you are not the leader
 	prepareCommand := PrepareCommandArg{
@@ -81,6 +81,7 @@ func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs, reply *RPCReply) error {
 
 //!< Handle the RPC to prepare messages
 func (pbft *PBFT) HandlePrepareRPC(args CommandArgs, reply *RPCReply) error {
+	log.Print("Getting to handle prepare\n")
 
 	/*if pbft.isChangingView() {
 		return nil
@@ -162,11 +163,13 @@ func (pbft *PBFT) HandlePrepareRPC(args CommandArgs, reply *RPCReply) error {
 	// TODO: maybe remove this save to persist
 	//pbft.persist()
 
+	log.Print("returning from prepare\n")
 	return nil
 }
 
 // Handles the commit RPC
 func (pbft *PBFT) HandleCommitRPC(args CommandArgs, reply *RPCReply) error {
+	log.Print("getting to handle commit\n")
 
 	/*if pbft.isChangingView() {
 		log.Print("[HandleCommitRPC] currently changing views")
@@ -273,6 +276,7 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs, reply *RPCReply) error {
 	// TODO: maybe remove this for to performance
 	//pbft.persist()
 
+	log.Print("leaving handle commit\n")
 	return nil
 }
 
