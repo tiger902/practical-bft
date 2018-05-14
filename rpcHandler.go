@@ -105,7 +105,7 @@ func (pbft *PBFT) HandlePrepareRPC(args CommandArgs, reply *RPCReply) error {
 	pbft.serverLock.Lock()
 	defer pbft.serverLock.Unlock()
 
-	logEntryItem, _ := pbft.serverLog[prepareArgs.SequenceNumber]
+	//logEntryItem, _ := pbft.serverLog[prepareArgs.SequenceNumber]
 
 	// A replica (including the primary) accepts prepare messages and adds them to its log
 	// provided their signatures are correct, their view number equals the replica’s current view,
