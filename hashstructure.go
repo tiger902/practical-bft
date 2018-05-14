@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"hash"
 	"reflect"
+	"log"
 )
 
 // ErrNotStringer is returned when there's an error with hash:"string"
@@ -176,6 +177,7 @@ func (w *walker) visit(v reflect.Value, opts *visitOpts) (uint64, error) {
 		for i := 0; i < l; i++ {
 			current, err := w.visit(v.Index(i), nil)
 			if err != nil {
+				log.Print("rip died at line 180 of hash")
 				return 0, err
 			}
 
