@@ -266,7 +266,7 @@ func (pbft *PBFT) sendRPCs(command CommandArgs, phase int) {
 			fmt.Print(replyCall)
 			fmt.Println()
 
-			fmt.Print(" Print the error for the call to the server %d\n", server)
+			fmt.Printf(" Print the error for the call to the server %d\n", server)
 			fmt.Print(callDone.Error)
 			fmt.Println()
 		}

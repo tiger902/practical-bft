@@ -166,6 +166,7 @@ func main() {
 	gob.Register(NewView{})
 	gob.Register(logEntry{})
 	gob.Register(CheckPointInfo{})
+	gob.Register(CommandArgs{})
 
 	//fmt.Println(runType)
 	//fmt.Println(os.Args[5])
