@@ -2,16 +2,14 @@ package main
 
 import (
 	"bytes"
-	"crypto/ecdsa"
-	"crypto/rand"
 	"encoding/binary"
 	"encoding/gob"
 	"errors"
 	"log"
-	"math"
 	"math/big"
 	"net/rpc"
 	"time"
+	"math"
 )
 
 // helper to check if in viewchange
@@ -256,6 +254,8 @@ func (pbft *PBFT) sendRPCs(command CommandArgs, phase int) {
 // helper function for checking that the Digest match
 func verifyDigests(arg interface{}, digest uint64) bool {
 
+	return true
+	/*
 	messageDigest, errDigest := Hash(arg, nil)
 	if errDigest != nil {
 		panic(errDigest)
@@ -264,12 +264,14 @@ func verifyDigests(arg interface{}, digest uint64) bool {
 		return false
 	}
 
-	return true
+	return true*/
 }
 
 // helper function for verifying the signatures of the commands
 func (pbft *PBFT) verifySignatures(args *verifySignatureArg, r_firstSig *big.Int, s_secondSig *big.Int, peerID int) bool {
 
+	return true
+	/*
 	hash, err := Hash(args, nil)
 	if err != nil {
 		panic(err)
@@ -281,7 +283,7 @@ func (pbft *PBFT) verifySignatures(args *verifySignatureArg, r_firstSig *big.Int
 	if !ecdsa.Verify(&pbft.publicKeys[peerID], hashByteArray, r_firstSig, s_secondSig) {
 		return false
 	}
-	return true
+	return true*/
 }
 
 // helper function to add a command to the log
@@ -490,15 +492,15 @@ func (pbft *PBFT) makeArguments(specificArgument interface{}) CommandArgs {
 	hashByteArray := make([]byte, 8)
 	binary.LittleEndian.PutUint64(hashByteArray, hash)
 
-	r, s, err1 := ecdsa.Sign(rand.Reader, &pbft.privateKey, hashByteArray)
+	//r, s, err1 := ecdsa.Sign(rand.Reader, &pbft.privateKey, hashByteArray)
 
-	if err1 != nil {
+	/*if err1 != nil {
 		panic(err1)
-	}
+	}*/
 
 	return CommandArgs{
 		SpecificArguments: specificArgument,
-		R_firstSig:        *r,
-		S_secondSig:       *s,
+		R_firstSig:        *big.NewInt(0),
+		S_secondSig:       *big.NewInt(0),
 	}
 }
