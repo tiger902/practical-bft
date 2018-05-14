@@ -53,6 +53,7 @@ type PreprepareWithNoClientMessage struct {
 	View           int    //!< leader’s term
 	SequenceNumber int    //!< Sequence number of the messsage
 	Digest         uint64 //!< Digest of the message, which can is an uint64 TODO: change type when we switch to SHA256
+	Timestamp	   time.Time
 }
 
 type verifySignatureArg struct {
@@ -64,6 +65,7 @@ type verifySignatureArg struct {
 type PrePrepareCommandArg struct {
 	PreprepareNoClientMessage CommandArgs
 	Message                   interface{} //!< Message for the command TODO: decouple this
+	Timestamp	   time.Time
 }
 
 //!struct used as argument to multicast command
@@ -72,6 +74,7 @@ type PrepareCommandArg struct {
 	SequenceNumber int    //!< Sequence number of the messsage
 	Digest         uint64 //!< Digest of the message, which can is an int TODO: check the type of this
 	SenderIndex    int    //!< Id of the server that sends the prepare message
+	Timestamp	   time.Time
 }
 
 //!struct used as argument to multicast command
@@ -80,6 +83,7 @@ type CommitArg struct {
 	SequenceNumber int    //!< Sequence number of the messsage
 	Digest         uint64 //!< Digest of the message, which can is an int TODO: check the type of this
 	SenderIndex    int    //!< Id of the server that sends the prepare message
+	Timestamp	   time.Time
 }
 
 //!struct used as argument to multicast command

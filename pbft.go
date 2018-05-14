@@ -43,7 +43,7 @@ func (pbft *PBFT) GetState(args interface{}, reply *GetStateReply) error {
 // return the
 func (pbft *PBFT) Start(clientCommand Command, reply *int) error {
 	log.Printf("Start being called\n")
-	pbft.replyToClient(CommandReply{}, "18.206.100.184")
+	//pbft.replyToClient(CommandReply{}, "18.206.100.184")
 
 	pbft.serverLock.Lock()
 	defer pbft.serverLock.Unlock()
@@ -74,6 +74,7 @@ func (pbft *PBFT) Start(clientCommand Command, reply *int) error {
 		View:           pbft.view,
 		SequenceNumber: pbft.sequenceNumber,
 		Digest:         hash,
+		Timestamp:                  time.Now(),
 	}
 
 	signedPreprepareNoMessage := pbft.makeArguments(prePrepareCommandArgsNoMessage)
@@ -81,6 +82,7 @@ func (pbft *PBFT) Start(clientCommand Command, reply *int) error {
 	prePrepareCommandArgs := PrePrepareCommandArg{
 		PreprepareNoClientMessage: signedPreprepareNoMessage,
 		Message:                   clientCommand,
+		Timestamp:                  time.Now(),
 	}
 
 	// multicast to all the other servers
