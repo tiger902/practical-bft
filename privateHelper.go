@@ -259,15 +259,15 @@ func (pbft *PBFT) sendRPCs(command CommandArgs, phase int) {
 	for server := 0; server < serverCount; server++ {
 		if server != pbft.serverID {
 			log.Printf("Calling the command %v to server %d\n", rpcHandlerName, server)
-			callDone := clients[server].Go(rpcHandlerName, command, nil /*reply*/, nil /*done channel*/)
+			clients[server].Go(rpcHandlerName, command, nil /*reply*/, nil /*done channel*/)
 
-			replyCall := <-callDone.Done
+			//replyCall := <-callDone.Done
 			fmt.Print(" Done with the RPC call to the server %d\n", server)
-			fmt.Print(replyCall)
+			//fmt.Print(replyCall)
 			fmt.Println()
 
 			fmt.Printf(" Print the error for the call to the server %d\n", server)
-			fmt.Print(callDone.Error)
+			//fmt.Print(callDone.Error)
 			fmt.Println()
 		}
 	}
