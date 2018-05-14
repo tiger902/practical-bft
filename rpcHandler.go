@@ -175,13 +175,13 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs, reply *RPCReply) error {
 
 	//pbft.commandRecieved <- true
 
-	commitArgs, ok := args.SpecificArguments.(PrepareCommandArg)
+	commitArgs, _ := args.SpecificArguments.(PrepareCommandArg)
 	/*if !ok {
 		log.Fatal("[handlePrePrepareRPC] preprepare command args failed")
 	}*/
 
 	// verify signatures
-	signatureArg := verifySignatureArg{
+	/*signatureArg := verifySignatureArg{
 		generic: commitArgs,
 	}
 	// check that the signature of the prepare command match
