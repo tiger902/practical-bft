@@ -1,6 +1,9 @@
 package main
 
-import "log"
+import (
+	"log"
+	"time"
+)
 
 //  HandlePrePrepareRPC receives and processes preprepare commands
 func (pbft *PBFT) HandlePrePrepareRPC(args CommandArgs, reply *RPCReply) error {
@@ -245,8 +248,8 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs, reply *RPCReply) error {
 		//clientCommand := logEntryItem.message.(Command)
 		clientCommandReply := CommandReply{
 			CurrentView:      pbft.view,
-			RequestTimestamp: nil,
-			ClientID:         nil,
+			RequestTimestamp: time.Now(),
+			ClientID:         0,
 			ServerID:         pbft.serverID,
 		}
 
