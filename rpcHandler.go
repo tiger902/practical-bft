@@ -94,34 +94,34 @@ func (pbft *PBFT) HandlePrepareRPC(args CommandArgs, reply *RPCReply) error {
 	}
 
 	// verify the signatures
-	signatureArg := verifySignatureArg{
+	/*signatureArg := verifySignatureArg{
 		generic: prepareArgs,
 	}
 	if !pbft.verifySignatures(&signatureArg, args.R_firstSig, args.S_secondSig, prepareArgs.SenderIndex) {
 		log.Print("[HandlePrepareRPC] signatures of the prepare command args don't match")
 		return nil
-	}
+	}*/
 
 	pbft.serverLock.Lock()
 	defer pbft.serverLock.Unlock()
 
-	logEntryItem, ok1 := pbft.serverLog[prepareArgs.SequenceNumber]
+	logEntryItem, _ := pbft.serverLog[prepareArgs.SequenceNumber]
 
 	// A replica (including the primary) accepts prepare messages and adds them to its log
 	// provided their signatures are correct, their view number equals the replica’s current view,
 	// and their sequence number is between h and H.
 
 	// do nothing if we did not receive a preprepare
-	if !ok1 {
+	/*if !ok1 {
 		log.Print("[HandlePrepareRPC] did not recieve a preprepare")
 		return nil
-	}
+	}*/
 
 	// do not accept of different views, or different signatures
-	if (prepareArgs.View != pbft.view) || (prepareArgs.Digest != logEntryItem.commandDigest) {
+	/*if (prepareArgs.View != pbft.view) || (prepareArgs.Digest != logEntryItem.commandDigest) {
 		log.Print("[HandlePrepareRPC] saw different view or different digest")
 		return nil
-	}
+	}*/
 
 	// TODO: check for the sequenceNumber ranges for the watermarks
 
@@ -130,7 +130,7 @@ func (pbft *PBFT) HandlePrepareRPC(args CommandArgs, reply *RPCReply) error {
 		return nil
 	}*/
 
-	pbft.serverLog[prepareArgs.SequenceNumber].prepareArgs[prepareArgs.SenderIndex] = args
+	//pbft.serverLog[prepareArgs.SequenceNumber].prepareArgs[prepareArgs.SenderIndex] = args
 
 	// return if already prepared
 	/*if len(logEntryItem.prepareArgs) > pbft.calculateMajority() {
@@ -147,7 +147,7 @@ func (pbft *PBFT) HandlePrepareRPC(args CommandArgs, reply *RPCReply) error {
 	// same view, sequence number, and digest
 
 	// go into the commit phase for this command after 2F + 1 replies
-	if len(logEntryItem.prepareArgs) == pbft.calculateMajority() {
+
 		commitArgs := CommitArg{
 			View:           pbft.view,
 			SequenceNumber: prepareArgs.SequenceNumber,
@@ -159,7 +159,7 @@ func (pbft *PBFT) HandlePrepareRPC(args CommandArgs, reply *RPCReply) error {
 		//pbft.serverLog[prepareArgs.SequenceNumber].commitArgs[pbft.serverID] = commitArg
 
 		go pbft.sendRPCs(commitArg, COMMIT)
-	}
+
 	// TODO: maybe remove this save to persist
 	//pbft.persist()
 
@@ -240,7 +240,7 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs, reply *RPCReply) error {
 
 	// go into the commit phase for this command after 2F + 1 replies +
 
-	if len(logEntryItem.commitArgs) == pbft.calculateMajority() {
+
 		logEntryItem.clientReplySent = true
 		clientCommand := logEntryItem.message.(Command)
 		clientCommandReply := CommandReply{
@@ -271,7 +271,7 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs, reply *RPCReply) error {
 		go pbft.replyToClient(clientCommandReply, clientCommand.ClientAddress)
 
 		//pbft.commandExecuted <- true
-	}
+
 
 	// TODO: maybe remove this for to performance
 	//pbft.persist()
