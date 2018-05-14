@@ -1,13 +1,13 @@
 package main
 
 import (
+	"encoding/gob"
 	"log"
 	"net"
 	"net/http"
 	"net/rpc"
 	"os"
 	"time"
-	"encoding/gob"
 )
 
 /*
@@ -74,7 +74,7 @@ func (pbft *PBFT) Start(clientCommand Command, reply *int) error {
 		View:           pbft.view,
 		SequenceNumber: pbft.sequenceNumber,
 		Digest:         hash,
-		Timestamp:                  time.Now(),
+		Timestamp:      time.Now(),
 	}
 
 	signedPreprepareNoMessage := pbft.makeArguments(prePrepareCommandArgsNoMessage)
@@ -82,7 +82,7 @@ func (pbft *PBFT) Start(clientCommand Command, reply *int) error {
 	prePrepareCommandArgs := PrePrepareCommandArg{
 		PreprepareNoClientMessage: signedPreprepareNoMessage,
 		Message:                   clientCommand,
-		Timestamp:                  time.Now(),
+		Timestamp:                 time.Now(),
 	}
 
 	// multicast to all the other servers
@@ -191,12 +191,11 @@ func main() {
 		log.Print("About to serve\n")
 		http.Serve(l, nil)
 		log.Print("Served them!\n")
-	} else if runType == "raft"  
+	} else if runType == "raft" {
 		startRaft()
-	}else {
+	} else {
 		log.Print("Entering client\n")
 		Bootstrap()
 	}
-
 
 }
