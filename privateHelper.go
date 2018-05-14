@@ -215,7 +215,7 @@ func (pbft *PBFT) sendRPCs(command CommandArgs, phase int) {
 	//Use RPC to the leader if command was sent to a non-leader
 	case FORWARD_COMMAND:
 		rpcHandlerName = "PBFT.ReceiveForwardedCommand"
-		pbft.peers[leader].Go(rpcHandlerName, command, nil /*reply*/, nil /*done channel*/)
+		//pbft.peers[leader].Go(rpcHandlerName, command, nil /*reply*/, nil /*done channel*/)
 		return
 
 	//Use RPC to send preprepare messages to everyone
@@ -231,7 +231,7 @@ func (pbft *PBFT) sendRPCs(command CommandArgs, phase int) {
 
 	case VIEW_CHANGE:
 		rpcHandlerName = "PBFT.HandleViewChangeRPC"
-		pbft.peers[newLeader].Go(rpcHandlerName, command, nil /*reply*/, nil /*done channel*/)
+		//pbft.peers[newLeader].Go(rpcHandlerName, command, nil /*reply*/, nil /*done channel*/)
 		return
 
 	case NEW_VIEW:
