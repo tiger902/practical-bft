@@ -200,7 +200,7 @@ func (pbft *PBFT) makeCheckpoint(checkPointInfo CheckPointInfo) {
 // General function send RPCs to everyone
 func (pbft *PBFT) sendRPCs(command CommandArgs, phase int) {
 
-	fmt.Println("RPC being called here for the command: %d", phase)
+	fmt.Printf("RPC being called here for the command: %d\n", phase)
 	pbft.serverLock.Lock()
 
 	newLeader := (pbft.view + 1) % len(pbft.peers)
@@ -247,7 +247,17 @@ func (pbft *PBFT) sendRPCs(command CommandArgs, phase int) {
 
 	for server := 0; server < serverCount; server++ {
 		if server != pbft.serverID {
-			pbft.peers[server].Go(rpcHandlerName, command, nil /*reply*/, nil /*done channel*/)
+			log.Printf("Calling the command %v to server %d\n", rpcHandlerName, server)
+			callDone := pbft.peers[server].Go(rpcHandlerName, command, nil /*reply*/, nil /*done channel*/)
+
+			replyCall := <-callDone.Done
+			fmt.Print(" Done with the RPC call to the server %d\n", server)
+			fmt.Print(replyCall)
+			fmt.Println()
+
+			fmt.Print(" Print the error for the call to the server %d\n", server)
+			fmt.Print(callDone.Error)
+			fmt.Println()
 		}
 	}
 
