@@ -510,9 +510,12 @@ func (pbft *PBFT) makeArguments(specificArgument interface{}) CommandArgs {
 		panic(err1)
 	}*/
 
+	x :=  big.NewInt(0)
+	y:= big.NewInt(0)
+
 	return CommandArgs{
 		SpecificArguments: specificArgument,
-		R_firstSig:        *big.NewInt(0),
-		S_secondSig:       *big.NewInt(0),
+		R_firstSig:      *x ,
+		S_secondSig:     *y,
 	}
 }
