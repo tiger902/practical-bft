@@ -120,8 +120,8 @@ func Bootstrap() {
 
 	// the first command to the servers
 	const T = 1000
-	//timer := time.NewTimer(time.Millisecond * + T)
-	//timer.Reset(time.Millisecond * time.Duration(T))
+	timer := time.NewTimer(time.Millisecond * + T)
+	timer.Reset(time.Millisecond * time.Duration(T))
 
 	fileHandler, err1 := os.OpenFile("pbft_latency_results", os.O_APPEND|os.O_WRONLY, 0644)
 	if err1 != nil {
@@ -136,8 +136,8 @@ func Bootstrap() {
 	for {
 		select {
 
-		//case <-timer.C:
-			//log.Print("time went off \n")
+		case <-timer.C:
+			log.Print("time went off \n")
 			/*if !timer.Stop() {
 				<-timer.C
 			}*/
