@@ -4,13 +4,13 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"net/rpc"
 	"os"
 	"time"
-	"fmt"
 )
 
 var servers = [...]string{"18.232.86.210", "54.164.151.89", "52.207.222.204", "52.91.154.255"}
@@ -120,10 +120,10 @@ func Bootstrap() {
 
 	// the first command to the servers
 	const T = 1000
-	timer := time.NewTimer(time.Millisecond * + T)
+	timer := time.NewTimer(time.Millisecond * +T)
 	timer.Reset(time.Millisecond * time.Duration(T))
 
-	fileHandler, err1 := os.OpenFile("pbft_latency_results", os.O_APPEND|os.O_WRONLY, 0644)
+	fileHandler, err1 := os.OpenFile("raft_latency_results", os.O_APPEND|os.O_WRONLY, 0644)
 	if err1 != nil {
 		log.Fatal(err1)
 	}
@@ -131,7 +131,6 @@ func Bootstrap() {
 	defer fileHandler.Close()
 
 	log.Print("About to do the for\n")
-
 
 	for {
 		select {
@@ -149,7 +148,7 @@ func Bootstrap() {
 				<-timer.C
 			}*/
 			byte := fmt.Sprintf("%d", commandDuration)
-			_, err3 := fileHandler.WriteString(byte+ "\n")
+			_, err3 := fileHandler.WriteString(byte + "\n")
 			if err3 != nil {
 				log.Fatal(err3)
 			}
