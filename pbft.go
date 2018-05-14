@@ -155,7 +155,11 @@ func main() {
 	runType := os.Args[1]
 	log.Print("Entering main function\n")
 
-	gob.Register(CommandArgs{})
+	gob.Register(RPCReply{})
+	gob.Register(CommandReply{})
+	gob.Register(Command{})
+	gob.Register(GetStateReply{})
+
 	gob.Register(MakeArgs{})
 	gob.Register(PreprepareWithNoClientMessage{})
 	gob.Register(PrePrepareCommandArg{})
