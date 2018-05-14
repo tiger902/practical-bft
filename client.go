@@ -43,7 +43,7 @@ func (c *Client) callCommand(server int) {
 
 	//pbft := new(PBFT)
 
-	serverClient[server].Go("PBFT.Start", command, nil, nil)
+	serverClient[server].Go("Raft.Start", command, nil, nil)
 
 }
 
@@ -86,7 +86,7 @@ func Bootstrap() {
 
 		serverClient = append(serverClient, client)
 
-		callDone := client.Go("PBFT.Make", args, nil, nil)
+		callDone := client.Go("Raft.Make", args, nil, nil)
 
 		replyCall := <-callDone.Done
 		fmt.Print(" Done with the RPC call\n")
