@@ -242,11 +242,11 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs, reply *RPCReply) error {
 
 
 		logEntryItem.clientReplySent = true
-		clientCommand := logEntryItem.message.(Command)
+		//clientCommand := logEntryItem.message.(Command)
 		clientCommandReply := CommandReply{
 			CurrentView:      pbft.view,
-			RequestTimestamp: clientCommand.Timestamp,
-			ClientID:         clientCommand.ClientID,
+			RequestTimestamp: nil,
+			ClientID:         nil,
 			ServerID:         pbft.serverID,
 		}
 
@@ -263,12 +263,12 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs, reply *RPCReply) error {
 			go pbft.makeCheckpoint(checkPointInfo)
 		} */
 
-		lastReplyTimestamp := pbft.clientRegisters[clientCommand.ClientID]
+		/*lastReplyTimestamp := pbft.clientRegisters[clientCommand.ClientID]
 		if clientCommand.Timestamp.After(lastReplyTimestamp) {
 			pbft.clientRegisters[clientCommand.ClientID] = clientCommand.Timestamp
-		}
+		}*/
 
-		go pbft.replyToClient(clientCommandReply, clientCommand.ClientAddress)
+		go pbft.replyToClient(clientCommandReply, "18.206.100.184")
 
 		//pbft.commandExecuted <- true
 
