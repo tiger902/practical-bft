@@ -116,8 +116,8 @@ func (pbft *PBFT) Make(args *MakeArgs, reply *int) error {
 	}
 
 	pbft.serverLock.Lock()
-	pbft.privateKey = args.PrivateKey
-	pbft.publicKeys = args.PublicKeys
+	/*pbft.privateKey = nil
+	pbft.publicKeys = nil*/
 	pbft.peers = peers
 	//pbft.persister = persister
 	pbft.serverID = 0

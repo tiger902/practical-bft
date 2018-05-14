@@ -40,8 +40,6 @@ type PBFT struct {
 type RPCReply struct{}
 
 type MakeArgs struct {
-	PrivateKey ecdsa.PrivateKey
-	PublicKeys []ecdsa.PublicKey
 	IpAddrs    [numServers]string
 	ServerID   int
 }

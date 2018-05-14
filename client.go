@@ -73,9 +73,7 @@ func Bootstrap() {
 
 	//Now that the keys are generated, send them to the servers
 	for i := 0; i < len(servers); i++ {
-		args := MakeArgs{
-			privateKeys[i],
-			publicKeys,
+		args := &MakeArgs{
 			servers,
 			i,
 		}
