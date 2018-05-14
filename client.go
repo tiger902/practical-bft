@@ -148,8 +148,8 @@ func Bootstrap() {
 			/*if !timer.Stop() {
 				<-timer.C
 			}*/
-			fmt.Printf("Command duration: %s", commandDuration)
-			_, err3 := fileHandler.WriteString(string(commandDuration))
+			byte := fmt.Sprintf("Command duration: %d", commandDuration)
+			_, err3 := fileHandler.WriteString(byte+ "\n")
 			if err3 != nil {
 				log.Fatal(err3)
 			}
