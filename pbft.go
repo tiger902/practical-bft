@@ -106,15 +106,10 @@ func (pbft *PBFT) Make(args *MakeArgs, reply *int) error {
 
 	//persister := &Persister{mu: sync.Mutex{}}
 
-	peers := []*rpc.Client{}
+	peers := []string{}
 
 	for i := 0; i < len(args.IpAddrs); i++ {
-		client, err := rpc.DialHTTP("tcp", args.IpAddrs[i]+":1234")
-		if err != nil {
-			log.Fatal("dialing:", err)
-		}
-
-		peers = append(peers, client)
+		peers = append(peers, args.IpAddrs[i])
 	}
 
 	pbft.serverLock.Lock()

@@ -244,10 +244,22 @@ func (pbft *PBFT) sendRPCs(command CommandArgs, phase int) {
 		log.Fatal("[sendRPCs] phase not found")
 	}
 
+	clients := []*rpc.Client{}
+
+	for i := 0; i < len(pbft.peers); i++ {
+		client, err := rpc.DialHTTP("tcp", pbft.peers[i]+":1234")
+		if err != nil {
+			log.Fatal("dialing:", err)
+		}
+
+		clients = append(clients, client)
+	}
+
+
 	for server := 0; server < serverCount; server++ {
 		if server != pbft.serverID {
 			log.Printf("Calling the command %v to server %d\n", rpcHandlerName, server)
-			callDone := pbft.peers[server].Go(rpcHandlerName, command, nil /*reply*/, nil /*done channel*/)
+			callDone := clients[server].Go(rpcHandlerName, command, nil /*reply*/, nil /*done channel*/)
 
 			replyCall := <-callDone.Done
 			fmt.Print(" Done with the RPC call to the server %d\n", server)

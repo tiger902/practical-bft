@@ -11,7 +11,7 @@ import (
 type PBFT struct {
 	privateKey ecdsa.PrivateKey  //!< Private key for this server
 	publicKeys []ecdsa.PublicKey //!< Array of publick keys for all servers
-	peers      []*rpc.Client     //!< Array of all the other server sockets for RPC
+	peers      []string     //!< Array of all the other server sockets for RPC
 	//persister               *Persister        //!< Persister to be used to store data for this server in permanent storage
 	serverID                int      //!< Index into peers[] for this server
 	sequenceNumber          int      //!< last sequence number
