@@ -63,6 +63,7 @@ func (pbft *PBFT) Start(clientCommand Command, reply *int) error {
 
 	// make a digest for the command from the client
 	hash, err := Hash(clientCommand, nil)
+	log.Print(hash)
 	if err != nil {
 		panic(err)
 	}

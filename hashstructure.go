@@ -158,15 +158,15 @@ func (w *walker) visit(v reflect.Value, opts *visitOpts) (uint64, error) {
 	if k >= reflect.Int && k <= reflect.Complex64 {
 		// A direct hash calculation
 		w.h.Reset()
-		err := binary.Write(w.h, binary.LittleEndian, v.Interface())
+		binary.Write(w.h, binary.LittleEndian, v.Interface())
 
 		buf := []byte{}
 		w.h.Sum(buf)
 
 		reader := bytes.NewBuffer(buf)
-		sum, err := binary.ReadVarint(reader)
+		sum, _ := binary.ReadVarint(reader)
 		// That conversion is sketchy
-		return uint64(sum), err
+		return uint64(sum), nil
 	}
 
 	switch k {
