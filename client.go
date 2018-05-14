@@ -75,7 +75,7 @@ func Bootstrap() {
 	for i := 0; i < len(servers); i++ {
 		args := &MakeArgs{
 			privateKeys[i],
-			publicKeys,
+			nil,
 			servers,
 			i,
 		}
@@ -92,9 +92,11 @@ func Bootstrap() {
 		replyCall := <-callDone.Done
 		fmt.Print(" Done with the RPC call\n")
 		fmt.Print(replyCall)
+		fmt.Println()
 
 		fmt.Print(" Print the error for the call\n")
 		fmt.Print(callDone.Error)
+		fmt.Println()
 
 	}
 	log.Print("Generated private keys\n")

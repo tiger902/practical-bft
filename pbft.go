@@ -171,7 +171,7 @@ func main() {
 		}
 
 		log.Print("About to serve\n")
-		go http.Serve(l, nil)
+		http.Serve(l, nil)
 		log.Print("Served them!\n")
 	} else {
 		log.Print("Entering client\n")
