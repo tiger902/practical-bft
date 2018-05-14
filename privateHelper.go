@@ -15,7 +15,7 @@ import (
 // helper to check if in viewchange
 func (pbft *PBFT) isChangingView() bool {
 
-	pbft.serverStateLock.Unlock()
+	pbft.serverStateLock.Lock()
 	defer pbft.serverStateLock.Unlock()
 	if pbft.state == CHANGING_VIEW {
 		return true
