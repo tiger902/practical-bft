@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/ecdsa"
-	"net/rpc"
 	"sync"
 	"time"
 )
