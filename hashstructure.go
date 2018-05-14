@@ -203,7 +203,8 @@ func (w *walker) visit(v reflect.Value, opts *visitOpts) (uint64, error) {
 				incl, err := includeMap.HashIncludeMap(
 					opts.StructField, k.Interface(), v.Interface())
 				if err != nil {
-					return 0, err
+					log.Print("rip died at line 206 of hash")
+					return 0, nil
 				}
 				if !incl {
 					continue
@@ -212,11 +213,13 @@ func (w *walker) visit(v reflect.Value, opts *visitOpts) (uint64, error) {
 
 			kh, err := w.visit(k, nil)
 			if err != nil {
-				return 0, err
+				log.Print("rip died at line 216 of hash")
+				return 0, nil
 			}
 			vh, err := w.visit(v, nil)
 			if err != nil {
-				return 0, err
+				log.Print("rip died at line 221 of hash")
+				return 0, nil
 			}
 
 			fieldHash := hashUpdateOrdered(w.h, kh, vh)
@@ -235,7 +238,8 @@ func (w *walker) visit(v reflect.Value, opts *visitOpts) (uint64, error) {
 		t := v.Type()
 		h, err := w.visit(reflect.ValueOf(t.Name()), nil)
 		if err != nil {
-			return 0, err
+			log.Print("rip died at line 241 of hash")
+			return 0, nil
 		}
 
 		l := v.NumField()
@@ -269,7 +273,8 @@ func (w *walker) visit(v reflect.Value, opts *visitOpts) (uint64, error) {
 				if include != nil {
 					incl, err := include.HashInclude(fieldType.Name, innerV)
 					if err != nil {
-						return 0, err
+						log.Print("rip died at line 276 of hash")
+						return 0, nil
 					}
 					if !incl {
 						continue
@@ -283,7 +288,8 @@ func (w *walker) visit(v reflect.Value, opts *visitOpts) (uint64, error) {
 
 				kh, err := w.visit(reflect.ValueOf(fieldType.Name), nil)
 				if err != nil {
-					return 0, err
+					log.Print("rip died at line 291 of hash")
+					return 0, nil
 				}
 
 				vh, err := w.visit(innerV, &visitOpts{
@@ -292,7 +298,8 @@ func (w *walker) visit(v reflect.Value, opts *visitOpts) (uint64, error) {
 					StructField: fieldType.Name,
 				})
 				if err != nil {
-					return 0, err
+					log.Print("rip died at line 200 of hash")
+					return 0, nil
 				}
 
 				fieldHash := hashUpdateOrdered(w.h, kh, vh)
