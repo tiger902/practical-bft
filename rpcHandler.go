@@ -124,20 +124,20 @@ func (pbft *PBFT) HandlePrepareRPC(args CommandArgs, reply *RPCReply) error {
 
 	// TODO: check for the sequenceNumber ranges for the watermarks
 
-	if _, ok2 := logEntryItem.prepareArgs[prepareArgs.SenderIndex]; ok2 {
+	/*if _, ok2 := logEntryItem.prepareArgs[prepareArgs.SenderIndex]; ok2 {
 		log.Print("[HandlePrepareRPC] already received from this server")
 		return nil
-	}
+	}*/
 
 	pbft.serverLog[prepareArgs.SequenceNumber].prepareArgs[prepareArgs.SenderIndex] = args
 
 	// return if already prepared
-	if len(logEntryItem.prepareArgs) > pbft.calculateMajority() {
+	/*if len(logEntryItem.prepareArgs) > pbft.calculateMajority() {
 		// TODO: maybe remove this save to persist
 		//pbft.persist()
 		log.Printf("[HandlePrepareRPC] already prepared, so exiting")
 		return nil
-	}
+	}*/
 
 	// We define the predicate prepared to be true iff replica has inserted in its
 	// log: the request, a pre-prepare for in view with sequence number, and 2f
@@ -168,27 +168,27 @@ func (pbft *PBFT) HandlePrepareRPC(args CommandArgs, reply *RPCReply) error {
 // Handles the commit RPC
 func (pbft *PBFT) HandleCommitRPC(args CommandArgs, reply *RPCReply) error {
 
-	if pbft.isChangingView() {
+	/*if pbft.isChangingView() {
 		log.Print("[HandleCommitRPC] currently changing views")
 		return nil
-	}
+	}*/
 
 	//pbft.commandRecieved <- true
 
 	commitArgs, ok := args.SpecificArguments.(PrepareCommandArg)
-	if !ok {
+	/*if !ok {
 		log.Fatal("[handlePrePrepareRPC] preprepare command args failed")
-	}
+	}*/
 
 	// verify signatures
 	signatureArg := verifySignatureArg{
 		generic: commitArgs,
 	}
 	// check that the signature of the prepare command match
-	if !pbft.verifySignatures(&signatureArg, args.R_firstSig, args.S_secondSig, commitArgs.SenderIndex) {
+	/*if !pbft.verifySignatures(&signatureArg, args.R_firstSig, args.S_secondSig, commitArgs.SenderIndex) {
 		log.Print("[HandleCommitRPC] signature of the preprepare does not match")
 		return nil
-	}
+	}*/
 
 	pbft.serverLock.Lock()
 	defer pbft.serverLock.Unlock()
@@ -200,24 +200,24 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs, reply *RPCReply) error {
 	// TODO: implement the h and H stuff
 	// TODO: verify signatures of this thing
 
-	if commitArgs.View != pbft.view {
+	/*if commitArgs.View != pbft.view {
 		log.Print("[HandleCommitRPC] Current view does not match request")
 		return nil
-	}
+	}*/
 
 	logEntryItem, ok := pbft.serverLog[commitArgs.SequenceNumber]
 
 	// do nothing if we did not receive a preprepare
-	if !ok {
+	/*if !ok {
 		log.Print("[HandleCommitRPC] did not recieve a preprepare")
 		return nil
-	}
+	}*/
 
 	// do nothing if this entry has not been prepared
-	if len(logEntryItem.prepareArgs) < pbft.calculateMajority() {
+	/*if len(logEntryItem.prepareArgs) < pbft.calculateMajority() {
 		log.Printf("[HandleCommitRPC] not prepared, so exiting")
 		return nil
-	}
+	}*/
 
 	// do nothing if we already received a commit from this server
 	if _, ok2 := logEntryItem.commitArgs[commitArgs.SenderIndex]; ok2 {
@@ -227,13 +227,13 @@ func (pbft *PBFT) HandleCommitRPC(args CommandArgs, reply *RPCReply) error {
 	pbft.serverLog[commitArgs.SequenceNumber].commitArgs[commitArgs.SenderIndex] = args
 
 	// do nothing if the reply has been sent already
-	if logEntryItem.clientReplySent {
+	/*if logEntryItem.clientReplySent {
 		// TODO: maybe remove this save to persist
 		//pbft.persist()
 
 		log.Print("[HandleCommitRPC] reply to client has already been sent")
 		return nil
-	}
+	}*/
 
 	// go into the commit phase for this command after 2F + 1 replies +
 
