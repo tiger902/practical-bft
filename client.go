@@ -10,6 +10,7 @@ import (
 	"net/rpc"
 	"os"
 	"time"
+	"fmt"
 )
 
 var servers = [...]string{"18.232.86.210", "54.164.151.89", "52.207.222.204", "52.91.154.255"}
@@ -86,13 +87,20 @@ func Bootstrap() {
 
 		serverClient = append(serverClient, client)
 
-		client.Call("PBFT.Make", args, nil)
+		callDone := client.Go("PBFT.Make", args, nil, nil)
+
+		replyCall := <-callDone.Done
+		fmt.Print(" Done with the RPC call\n")
+		fmt.Print(replyCall)
+
+		fmt.Print(" Print the error for the call\n")
+		fmt.Print(callDone.Error)
 
 	}
 	log.Print("Generated private keys\n")
 
 	// client should make it's RPC server as well
-	client := Client{resultChannel: make(chan int64, 1000)}
+	client := &Client{resultChannel: make(chan int64, 1000)}
 	rpc.Register(client)
 	log.Print("Registered client\n")
 
