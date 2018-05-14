@@ -10,6 +10,7 @@ import (
 	"net/rpc"
 	"time"
 	"math"
+	"fmt"
 )
 
 // helper to check if in viewchange
@@ -199,6 +200,7 @@ func (pbft *PBFT) makeCheckpoint(checkPointInfo CheckPointInfo) {
 // General function send RPCs to everyone
 func (pbft *PBFT) sendRPCs(command CommandArgs, phase int) {
 
+	fmt.Println("RPC being called here for the command: %d", phase)
 	pbft.serverLock.Lock()
 
 	newLeader := (pbft.view + 1) % len(pbft.peers)
