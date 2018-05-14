@@ -120,7 +120,7 @@ func (pbft *PBFT) Make(args *MakeArgs, reply *int) error {
 	pbft.publicKeys = nil*/
 	pbft.peers = peers
 	//pbft.persister = persister
-	pbft.serverID = 0
+	pbft.serverID = args.ServerID
 	pbft.sequenceNumber = 0
 	pbft.commandsChannel = make(chan int, 10)
 	pbft.uncommittedCommands = 0
