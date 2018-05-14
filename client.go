@@ -22,6 +22,8 @@ type Client struct {
 
 func (c *Client) ReceiveReply(args CommandReply, reply *RPCReply) error {
 
+	fmt.Println("Received reply")
+
 	timeDifference := time.Now().Sub(args.RequestTimestamp)
 	c.resultChannel <- timeDifference.Nanoseconds()
 	return nil
