@@ -1,19 +1,19 @@
 package main
 
 //
-// support for Raft and kvraft to save persistent
-// Raft state (log &c) and k/v server snapshots.
-//
-// we will use the original persister.go to test your code for grading.
-// so, while you can modify this code to help you debug, please
-// test with the original before submitting.
+// support for PBFT to save persistent
 //
 
-import "sync"
+import (
+	"log"
+	"sync"
+
+	"github.com/boltdb/bolt"
+)
 
 type Persister struct {
 	mu        sync.Mutex
-	raftstate []byte
+	pbftstate []byte
 	snapshot  []byte
 }
 
@@ -25,37 +25,92 @@ func (ps *Persister) Copy() *Persister {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
 	np := MakePersister()
-	np.raftstate = ps.raftstate
+	np.pbftstate = ps.pbftstate
 	np.snapshot = ps.snapshot
 	return np
 }
 
-func (ps *Persister) SaveRaftState(data []byte) {
+func (ps *Persister) SavePBFTState(data []byte) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
-	ps.raftstate = data
+
+	db, err := bolt.Open("my.db", 0600, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("storage"))
+		err := b.Put([]byte("state"), data)
+		return err
+	})
+
+	ps.pbftstate = data
 }
 
-func (ps *Persister) ReadRaftState() []byte {
+func (ps *Persister) ReadPBFTState() []byte {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
-	return ps.raftstate
+	state := []byte{}
+
+	db, err := bolt.Open("my.db", 0600, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("storage"))
+		state = b.Get([]byte("state"))
+		return nil
+	})
+
+	return state
 }
 
-func (ps *Persister) RaftStateSize() int {
+func (ps *Persister) PBFTStateSize() int {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
-	return len(ps.raftstate)
+	return len(ps.pbftstate)
 }
 
 func (ps *Persister) SaveSnapshot(snapshot []byte) {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
+
+	db, err := bolt.Open("my.db", 0600, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("storage"))
+		err := b.Put([]byte("snapshot"), snapshot)
+		return err
+	})
+
 	ps.snapshot = snapshot
 }
 
 func (ps *Persister) ReadSnapshot() []byte {
 	ps.mu.Lock()
 	defer ps.mu.Unlock()
-	return ps.snapshot
+
+	snapshot := []byte{}
+
+	db, err := bolt.Open("my.db", 0600, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("storage"))
+		snapshot = b.Get([]byte("snapshot"))
+		return nil
+	})
+
+	return snapshot
 }

@@ -1,12 +1,11 @@
 package main
 
 import (
-	"encoding/gob"
 	"log"
 	"net"
 	"net/http"
 	"net/rpc"
-	"os"
+	"sync"
 	"time"
 )
 
@@ -42,8 +41,6 @@ func (pbft *PBFT) GetState(args interface{}, reply *GetStateReply) error {
 // starts a new command
 // return the
 func (pbft *PBFT) Start(clientCommand Command, reply *int) error {
-	log.Printf("Start being called\n")
-	//pbft.replyToClient(CommandReply{}, "18.206.100.184")
 
 	pbft.serverLock.Lock()
 	defer pbft.serverLock.Unlock()
@@ -107,8 +104,6 @@ func (pbft *PBFT) Start(clientCommand Command, reply *int) error {
 func (pbft *PBFT) Make(args *MakeArgs, reply *int) error {
 	log.Print("Make being called!\n")
 
-	//persister := &Persister{mu: sync.Mutex{}}
-
 	peers := []string{}
 
 	for i := 0; i < len(args.IpAddrs); i++ {
@@ -116,10 +111,11 @@ func (pbft *PBFT) Make(args *MakeArgs, reply *int) error {
 	}
 
 	pbft.serverLock.Lock()
-	/*pbft.privateKey = nil
-	pbft.publicKeys = nil*/
+	pbft.privateKey = args.privateKey
+	pbft.publicKeys = args.publicKeys
+
 	pbft.peers = peers
-	//pbft.persister = persister
+	pbft.persister = Persister{mu: sync.Mutex{}}
 	pbft.serverID = args.ServerID
 	pbft.sequenceNumber = 0
 	pbft.commandsChannel = make(chan int, 10)
@@ -136,66 +132,27 @@ func (pbft *PBFT) Make(args *MakeArgs, reply *int) error {
 	pbft.commandExecuted = make(chan bool, 10)
 	pbft.commandRecieved = make(chan bool, 10)
 	pbft.viewChangeComplete = make(chan int, 10)
-
-	// TODO: uncomment this
-	//pbft.readPersist(persister.ReadPBFTState())
+	pbft.readPersist(persister.ReadPBFTState())
 	pbft.serverLock.Unlock()
-
-	// start a go routine for handling command
-	// TODO: remove this later when we fix everything
-	//go pbft.runningState()
 
 	return nil
 }
 
-func main() {
+func runpbft() {
+	log.Print("Entering server\n")
+	pbft := &PBFT{}
+	rpc.Register(pbft)
+	log.Print("Registering server\n")
 
-	runType := os.Args[1]
-	log.Print("Entering main function\n")
+	rpc.HandleHTTP()
+	log.Print("Handle HTTP\n")
 
-	gob.Register(RPCReply{})
-	gob.Register(CommandReply{})
-	gob.Register(Command{})
-	gob.Register(GetStateReply{})
-
-	gob.Register(MakeArgs{})
-	gob.Register(PreprepareWithNoClientMessage{})
-	gob.Register(PrePrepareCommandArg{})
-	gob.Register(PrepareCommandArg{})
-	gob.Register(CommitArg{})
-	gob.Register(CheckPointArgs{})
-	gob.Register(PrepareMForViewChange{})
-	gob.Register(ViewChange{})
-	gob.Register(NewView{})
-	gob.Register(logEntry{})
-	gob.Register(CheckPointInfo{})
-	gob.Register(CommandArgs{})
-
-	//fmt.Println(runType)
-	//fmt.Println(os.Args[5])
-
-	if runType == "server" {
-		log.Print("Entering server\n")
-		pbft := &PBFT{}
-		rpc.Register(pbft)
-		log.Print("Registering server\n")
-
-		rpc.HandleHTTP()
-		log.Print("Handle HTTP\n")
-
-		l, e := net.Listen("tcp", ":1234")
-		if e != nil {
-			log.Fatal("listen error:", e)
-		}
-
-		log.Print("About to serve\n")
-		http.Serve(l, nil)
-		log.Print("Served them!\n")
-	} else if runType == "raft" {
-		startRaft()
-	} else {
-		log.Print("Entering client\n")
-		Bootstrap()
+	l, e := net.Listen("tcp", ":1234")
+	if e != nil {
+		log.Fatal("listen error:", e)
 	}
 
+	log.Print("About to serve\n")
+	http.Serve(l, nil)
+	log.Print("Served them!\n")
 }

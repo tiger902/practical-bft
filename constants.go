@@ -26,4 +26,5 @@ const (
 // protocol constants
 const (
 	CHECK_POINT_INTERVAL = 100
+	VIEW_CHANGE_INTERVAL = 150 // time for initiating view change
 )

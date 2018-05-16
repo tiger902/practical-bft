@@ -2,14 +2,17 @@ package main
 
 import (
 	"bytes"
+	"crypto/ecdsa"
 	"encoding/binary"
 	"encoding/gob"
 	"errors"
+	"fmt"
 	"log"
+	"math"
+	"math/big"
+	"math/rand"
 	"net/rpc"
 	"time"
-	"math"
-	"fmt"
 )
 
 // helper to check if in viewchange
@@ -40,8 +43,6 @@ func (pbft *PBFT) calculateMajority() int {
 
 // Processes commands in a loop as they come from commandsChannel
 func (pbft *PBFT) runningState() {
-
-	const T = 150 //TODO: this need to be changed
 	timer := &time.Timer{}
 
 	pbft.state = IDLE
@@ -71,14 +72,14 @@ func (pbft *PBFT) runningState() {
 				if !timer.Stop() {
 					<-timer.C
 				}
-				timer.Reset(time.Millisecond * time.Duration(T))
+				timer.Reset(time.Millisecond * time.Duration(VIEW_CHANGE_INTERVAL))
 			}
 
 		case <-pbft.commandRecieved:
 			if !timer.Stop() {
 				<-timer.C
 			}
-			timer.Reset(time.Millisecond * time.Duration(T))
+			timer.Reset(time.Millisecond * time.Duration(VIEW_CHANGE_INTERVAL))
 
 		// decrement the number of commands we are waiting for and
 		// stop the timer if there is no more commands to run, otherwise restart
@@ -98,7 +99,7 @@ func (pbft *PBFT) runningState() {
 					pbft.state = IDLE
 					pbft.serverStateLock.Unlock()
 				} else {
-					timer.Reset(time.Millisecond * time.Duration(T))
+					timer.Reset(time.Millisecond * time.Duration(VIEW_CHANGE_INTERVAL))
 				}
 			}
 
@@ -202,8 +203,8 @@ func (pbft *PBFT) sendRPCs(command CommandArgs, phase int) {
 	fmt.Printf("RPC being called here for the command: %d\n", phase)
 	pbft.serverLock.Lock()
 
-	/*newLeader := (pbft.view + 1) % len(pbft.peers)
-	leader := pbft.view % len(pbft.peers)*/
+	newLeader := (pbft.view + 1) % len(pbft.peers)
+	leader := pbft.view % len(pbft.peers)
 	serverCount := len(pbft.peers)
 
 	pbft.serverLock.Unlock()
@@ -214,8 +215,14 @@ func (pbft *PBFT) sendRPCs(command CommandArgs, phase int) {
 
 	//Use RPC to the leader if command was sent to a non-leader
 	case FORWARD_COMMAND:
+
 		rpcHandlerName = "PBFT.ReceiveForwardedCommand"
-		//pbft.peers[leader].Go(rpcHandlerName, command, nil /*reply*/, nil /*done channel*/)
+		client, err := rpc.DialHTTP("tcp", pbft.peers[leader]+":1234")
+		if err != nil {
+			log.Fatal("dialing:", err)
+		}
+
+		client.Go(rpcHandlerName, command, nil /*reply*/, nil /*done channel*/)
 		return
 
 	//Use RPC to send preprepare messages to everyone
@@ -231,7 +238,12 @@ func (pbft *PBFT) sendRPCs(command CommandArgs, phase int) {
 
 	case VIEW_CHANGE:
 		rpcHandlerName = "PBFT.HandleViewChangeRPC"
-		//pbft.peers[newLeader].Go(rpcHandlerName, command, nil /*reply*/, nil /*done channel*/)
+		client, err := rpc.DialHTTP("tcp", pbft.peers[newLeader]+":1234")
+		if err != nil {
+			log.Fatal("dialing:", err)
+		}
+
+		client.Go(rpcHandlerName, command, nil /*reply*/, nil /*done channel*/)
 		return
 
 	case NEW_VIEW:
@@ -255,7 +267,6 @@ func (pbft *PBFT) sendRPCs(command CommandArgs, phase int) {
 		clients = append(clients, client)
 	}
 
-
 	for server := 0; server < serverCount; server++ {
 		if server != pbft.serverID {
 			log.Printf("Calling the command %v to server %d\n", rpcHandlerName, server)
@@ -277,8 +288,6 @@ func (pbft *PBFT) sendRPCs(command CommandArgs, phase int) {
 // helper function for checking that the Digest match
 func verifyDigests(arg interface{}, digest uint64) bool {
 
-	return true
-	/*
 	messageDigest, errDigest := Hash(arg, nil)
 	if errDigest != nil {
 		panic(errDigest)
@@ -287,14 +296,12 @@ func verifyDigests(arg interface{}, digest uint64) bool {
 		return false
 	}
 
-	return true*/
+	return true
 }
 
 // helper function for verifying the signatures of the commands
-func (pbft *PBFT) verifySignatures(args *verifySignatureArg, r_firstSig int, s_secondSig int, peerID int) bool {
+func (pbft *PBFT) verifySignatures(args *verifySignatureArg, r_firstSig *big.Int, s_secondSig *big.Int, peerID int) bool {
 
-	return true
-	/*
 	hash, err := Hash(args, nil)
 	if err != nil {
 		panic(err)
@@ -306,7 +313,7 @@ func (pbft *PBFT) verifySignatures(args *verifySignatureArg, r_firstSig int, s_s
 	if !ecdsa.Verify(&pbft.publicKeys[peerID], hashByteArray, r_firstSig, s_secondSig) {
 		return false
 	}
-	return true*/
+	return true
 }
 
 // helper function to add a command to the log
@@ -456,9 +463,7 @@ func (pbft *PBFT) ReceiveForwardedCommand(command CommandArgs, reply *interface{
 // Write the relavant state of PBFT to persistent storage
 // should be called by someone with a lock
 func (pbft *PBFT) persist() {
-
-	// TODO: maybe copy this and then save it from that copy so that we do not stall the protocol
-	/*w := new(bytes.Buffer)
+	w := new(bytes.Buffer)
 	e := gob.NewEncoder(w)
 
 	e.Encode(pbft.sequenceNumber)
@@ -470,7 +475,7 @@ func (pbft *PBFT) persist() {
 
 	data := w.Bytes()
 
-	pbft.persister.SavePBFTState(data)*/
+	pbft.persister.SavePBFTState(data)
 }
 
 //! Restore previously persisted state.
@@ -515,15 +520,15 @@ func (pbft *PBFT) makeArguments(specificArgument interface{}) CommandArgs {
 	hashByteArray := make([]byte, 8)
 	binary.LittleEndian.PutUint64(hashByteArray, hash)
 
-	//r, s, err1 := ecdsa.Sign(rand.Reader, &pbft.privateKey, hashByteArray)
+	r, s, err1 := ecdsa.Sign(rand.Reader, &pbft.privateKey, hashByteArray)
 
-	/*if err1 != nil {
+	if err1 != nil {
 		panic(err1)
-	}*/
+	}
 
 	return CommandArgs{
 		SpecificArguments: specificArgument,
-		R_firstSig:      0,
-		S_secondSig:     0,
+		R_firstSig:        0,
+		S_secondSig:       0,
 	}
 }

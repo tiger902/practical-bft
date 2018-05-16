@@ -38,12 +38,12 @@ func (c *Client) callCommand(server int) {
 		ClientID:      0,
 	}
 
-	/*client, err := rpc.DialHTTP("tcp", server+":1234")
+	client, err := rpc.DialHTTP("tcp", server+":1234")
 	if err != nil {
 		log.Fatal("dialing:", err)
-	}*/
+	}
 
-	//pbft := new(PBFT)
+	pbft := new(PBFT)
 
 	serverClient[server].Go("Raft.Start", command, nil, nil)
 
@@ -53,7 +53,7 @@ func (c *Client) callCommand(server int) {
  * Bootstraps the response servers by calling the make function and giving them the private and public keys
  *
  */
-func Bootstrap() {
+func runClient() {
 	curve := elliptic.P256()
 
 	publicKeys := []ecdsa.PublicKey{}
@@ -77,8 +77,10 @@ func Bootstrap() {
 	//Now that the keys are generated, send them to the servers
 	for i := 0; i < len(servers); i++ {
 		args := &MakeArgs{
-			servers,
-			i,
+			IpAddrs:    servers,
+			publicKeys: publicKeys,
+			privateKey: privateKeys[i],
+			ServerID:   i,
 		}
 
 		client, err := rpc.DialHTTP("tcp", servers[i]+":1234")
@@ -121,9 +123,9 @@ func Bootstrap() {
 	log.Print("Serving server\n")
 
 	// the first command to the servers
-	const T = 1000
-	timer := time.NewTimer(time.Millisecond * +T)
-	timer.Reset(time.Millisecond * time.Duration(T))
+	const NEW_COMMAND_REQUEST = 1000
+	timer := time.NewTimer(time.Millisecond * NEW_COMMAND_REQUEST)
+	timer.Reset(time.Millisecond * time.Duration(NEW_COMMAND_REQUEST))
 
 	fileHandler, err1 := os.OpenFile("raft_latency_results", os.O_APPEND|os.O_WRONLY, 0644)
 	if err1 != nil {
@@ -139,27 +141,23 @@ func Bootstrap() {
 
 		case <-timer.C:
 			log.Print("time went off \n")
-			/*if !timer.Stop() {
+			if !timer.Stop() {
 				<-timer.C
-			}*/
-			timer.Reset(time.Millisecond * time.Duration(T))
-
+			}
 		case commandDuration := <-client.resultChannel:
 			print("got something")
-			/*if !timer.Stop() {
+			if !timer.Stop() {
 				<-timer.C
-			}*/
+			}
 			byte := fmt.Sprintf("%d", commandDuration)
 			_, err3 := fileHandler.WriteString(byte + "\n")
 			if err3 != nil {
 				log.Fatal(err3)
 			}
-
-			//timer.Reset(time.Millisecond * time.Duration(T))
 		}
 
 		client.callCommand(0)
 		log.Print("Clint sent another to servers\n")
-		//timer.Reset(time.Millisecond * time.Duration(T))
+		timer.Reset(time.Millisecond * time.Duration())
 	}
 }

@@ -8,15 +8,15 @@ import (
 
 //! A Go object implementing a single PBFT peer.
 type PBFT struct {
-	privateKey ecdsa.PrivateKey  //!< Private key for this server
-	publicKeys []ecdsa.PublicKey //!< Array of publick keys for all servers
-	peers      []string     //!< Array of all the other server sockets for RPC
-	//persister               *Persister        //!< Persister to be used to store data for this server in permanent storage
-	serverID                int      //!< Index into peers[] for this server
-	sequenceNumber          int      //!< last sequence number
-	commandsChannel         chan int //!< channel for commands
-	uncommittedCommands     int      //!< store the number of commands that we are waiting for
-	state                   int      //!< the state of the server
+	privateKey              ecdsa.PrivateKey  //!< Private key for this server
+	publicKeys              []ecdsa.PublicKey //!< Array of publick keys for all servers
+	peers                   []string          //!< Array of all the other server sockets for RPC
+	persister               *Persister        //!< Persister to be used to store data for this server in permanent storage
+	serverID                int               //!< Index into peers[] for this server
+	sequenceNumber          int               //!< last sequence number
+	commandsChannel         chan int          //!< channel for commands
+	uncommittedCommands     int               //!< store the number of commands that we are waiting for
+	state                   int               //!< the state of the server
 	serverStateLock         sync.Mutex
 	lastCheckPointSeqNumber int                    //!< the sequence number of the last checkpoint
 	view                    int                    //!< the current view of the system
@@ -39,6 +39,8 @@ type RPCReply struct{}
 
 type MakeArgs struct {
 	IpAddrs    [numServers]string
+	publicKeys []ecdsa.PublicKey
+	privateKey ecdsa.PrivateKey
 	ServerID   int
 }
 
@@ -53,7 +55,7 @@ type PreprepareWithNoClientMessage struct {
 	View           int    //!< leader’s term
 	SequenceNumber int    //!< Sequence number of the messsage
 	Digest         uint64 //!< Digest of the message, which can is an uint64 TODO: change type when we switch to SHA256
-	Timestamp	   time.Time
+	Timestamp      time.Time
 }
 
 type verifySignatureArg struct {
@@ -61,11 +63,10 @@ type verifySignatureArg struct {
 }
 
 //!struct used for preprepare command arguments before they have been signed
-// TODO: change this to reflect that in places we use it
 type PrePrepareCommandArg struct {
 	PreprepareNoClientMessage CommandArgs
 	Message                   interface{} //!< Message for the command TODO: decouple this
-	Timestamp	   time.Time
+	Timestamp                 time.Time
 }
 
 //!struct used as argument to multicast command
@@ -74,7 +75,7 @@ type PrepareCommandArg struct {
 	SequenceNumber int    //!< Sequence number of the messsage
 	Digest         uint64 //!< Digest of the message, which can is an int TODO: check the type of this
 	SenderIndex    int    //!< Id of the server that sends the prepare message
-	Timestamp	   time.Time
+	Timestamp      time.Time
 }
 
 //!struct used as argument to multicast command
@@ -83,7 +84,7 @@ type CommitArg struct {
 	SequenceNumber int    //!< Sequence number of the messsage
 	Digest         uint64 //!< Digest of the message, which can is an int TODO: check the type of this
 	SenderIndex    int    //!< Id of the server that sends the prepare message
-	Timestamp	   time.Time
+	Timestamp      time.Time
 }
 
 //!struct used as argument to multicast command
